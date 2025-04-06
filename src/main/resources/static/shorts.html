@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>루나르트 정산 시스템 - 유튜브 쇼츠</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      /* 공통 스타일 */
+      body {
+        font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        min-height: 100vh;
+        background-color: #f8f9fa;
+        color: #333;
+      }
+
+      /* 사이드바 스타일 */
+      .sidebar {
+        width: 250px;
+        background: linear-gradient(135deg, #2c3e50, #1e272e);
+        color: white;
+        padding: 20px 0;
+        min-height: 100vh;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+
+      .sidebar-title {
+        padding: 0 20px;
+        margin-bottom: 15px;
+        font-size: 20px;
+        text-align: center;
+        font-weight: bold;
+        color: #ecf0f1;
+      }
+
+      .separator {
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.05),
+          rgba(255, 255, 255, 0.2),
+          rgba(255, 255, 255, 0.05)
+        );
+        margin: 15px 20px;
+      }
+
+      .menu-group {
+        margin-bottom: 25px;
+      }
+
+      .menu-title {
+        padding: 12px 20px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: #bdc3c7;
+        font-size: 16px;
+      }
+
+      .menu-title:hover {
+        color: #ecf0f1;
+      }
+
+      .menu-items {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .menu-item {
+        padding: 10px 35px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .menu-item::before {
+        content: "";
+        position: absolute;
+        left: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.3);
+        transition: all 0.2s ease;
+      }
+
+      .menu-item.active {
+        background: linear-gradient(90deg, #3498db, rgba(52, 152, 219, 0.7));
+      }
+
+      .menu-item.active::before {
+        background-color: white;
+      }
+
+      .menu-item:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .menu-item a {
+        color: #ecf0f1;
+        text-decoration: none;
+        display: block;
+        width: 100%;
+        transition: all 0.3s;
+      }
+
+      /* 메인 콘텐츠 스타일 */
+      .main-content {
+        flex: 1;
+        padding: 30px;
+        background-color: #f8f9fa;
+      }
+
+      /* 페이지 특화 스타일 */
+      .container {
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+        padding: 25px;
+        margin-bottom: 30px;
+        transition: all 0.3s ease;
+      }
+
+      .container:hover {
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+      }
+
+      .title {
+        font-size: 28px;
+        margin-bottom: 25px;
+        color: #2c3e50;
+        font-weight: 600;
+        position: relative;
+        padding-bottom: 10px;
+      }
+
+      .title::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 60px;
+        height: 3px;
+        background: linear-gradient(90deg, #3498db, #2980b9);
+        border-radius: 3px;
+      }
+
+      .instruction {
+        color: #555;
+        margin-bottom: 20px;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .form-container {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #4a5568;
+      }
+
+      /* 파일 선택 버튼 스타일 개선 */
+      .custom-file-upload {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+        width: fit-content;
+        font-weight: 500;
+        margin-bottom: 10px;
+      }
+
+      .custom-file-upload:hover {
+        background: linear-gradient(135deg, #2980b9, #2471a3);
+        transform: translateY(-2px);
+        box-shadow: 0 5px 12px rgba(52, 152, 219, 0.4);
+      }
+
+      .custom-file-upload:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 6px rgba(52, 152, 219, 0.3);
+      }
+
+      .custom-file-upload i {
+        margin-right: 8px;
+      }
+
+      .file-selected {
+        margin-top: 10px;
+        padding: 8px 12px;
+        background-color: #e2f0ff;
+        color: #3498db;
+        border-radius: 4px;
+        font-size: 14px;
+        display: none;
+      }
+
+      input[type="file"] {
+        display: none;
+      }
+
+      .button-container {
+        margin-top: 25px;
+      }
+
+      /* 변환 시작 버튼 디자인 개선 */
+      .action-button {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        border: none;
+        padding: 14px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+
+      .action-button:hover {
+        background: linear-gradient(135deg, #2980b9, #2471a3);
+        transform: translateY(-2px);
+        box-shadow: 0 5px 12px rgba(52, 152, 219, 0.4);
+      }
+
+      .action-button:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 6px rgba(52, 152, 219, 0.3);
+      }
+
+      .action-button:disabled {
+        background: #cccccc;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .progress-container {
+        display: none;
+        margin-top: 30px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      .progress-bar {
+        height: 10px;
+        background-color: #e1e4e8;
+        border-radius: 5px;
+        overflow: hidden;
+        margin-bottom: 15px;
+      }
+
+      .progress {
+        height: 100%;
+        background: linear-gradient(90deg, #3498db, #2980b9);
+        border-radius: 5px;
+        transition: width 0.3s ease;
+        text-align: center;
+        color: white;
+        font-size: 10px;
+        line-height: 10px;
+      }
+
+      .spinner {
+        width: 30px;
+        height: 30px;
+        border: 3px solid rgba(52, 152, 219, 0.2);
+        border-top-color: #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+      }
+
+      .progress-text {
+        text-align: center;
+        color: #4a5568;
+        font-weight: 500;
+      }
+
+      .result-section {
+        display: none;
+        margin-top: 30px;
+      }
+
+      .result-section.visible {
+        display: block;
+      }
+
+      .result-title {
+        font-size: 20px;
+        margin-bottom: 15px;
+        color: #2c3e50;
+        font-weight: 600;
+      }
+
+      .result-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .result-item {
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      .result-name {
+        flex: 1;
+        font-weight: 500;
+        color: #4a5568;
+      }
+
+      .download-link {
+        padding: 8px 12px;
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+      }
+
+      .download-link:hover {
+        background: linear-gradient(135deg, #27ae60, #219653);
+        transform: translateY(-2px);
+        box-shadow: 0 3px 6px rgba(46, 204, 113, 0.3);
+      }
+
+      .download-all-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+      }
+
+      .download-all-button {
+        padding: 10px 20px;
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 3px 8px rgba(46, 204, 113, 0.3);
+      }
+
+      .download-all-button:hover {
+        background: linear-gradient(135deg, #27ae60, #219653);
+        transform: translateY(-2px);
+        box-shadow: 0 5px 12px rgba(46, 204, 113, 0.4);
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .error-message {
+        display: none;
+        padding: 12px 15px;
+        background-color: #fee2e2;
+        color: #dc2626;
+        border-radius: 6px;
+        margin-top: 20px;
+        font-weight: 500;
+      }
+
+      /* 로딩 스피너 스타일 */
+      .spinner-container {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 999;
+      }
+
+      .spinner-box {
+        background-color: white;
+        padding: 30px;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+      }
+
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(52, 152, 219, 0.2);
+        border-top-color: #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+      }
+
+      .spinner-text {
+        color: #2c3e50;
+        font-weight: 500;
+        font-size: 16px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* 반응형 디자인 */
+      @media (max-width: 768px) {
+        body {
+          flex-direction: column;
+        }
+        .sidebar {
+          width: 100%;
+          min-height: auto;
+          height: auto;
+          position: relative;
+        }
+        .main-content {
+          padding: 20px;
+        }
+      }
+
+      .highlight-info {
+        color: #3498db;
+        font-weight: 500;
+        display: inline-block;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar">
+      <div class="sidebar-title">루나르트 파일 작업</div>
+      <div class="separator"></div>
+      <div class="menu-group">
+        <div class="menu-title">파일 변환</div>
+        <ul class="menu-items">
+          <li class="menu-item"><a href="/melon.html">멜론</a></li>
+          <li class="menu-item"><a href="/genie.html">지니</a></li>
+          <li class="menu-item"><a href="/vibe.html">바이브</a></li>
+          <li class="menu-item"><a href="/flo.html">플로</a></li>
+        </ul>
+      </div>
+      <div class="menu-group">
+        <div class="menu-title">파일 분할</div>
+        <ul class="menu-items">
+          <li class="menu-item active">
+            <a href="/shorts.html">엑셀 파일 분할</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="container">
+        <h1 class="title">대용량 엑셀 파일 CSV 변환 및 분할</h1>
+        <p class="description">
+          분할하려고 하는 xlsx 파일을 올리고 변환 시작하기를 눌러주세요.
+          <br />
+          <span class="highlight-info"
+            >* 업로드한 파일의 마지막 행은 자동으로 제외됩니다.</span
+          >
+        </p>
+        <div class="form-container">
+          <form id="excelSplitForm">
+            <div class="form-group">
+              <label for="excelFile">엑셀 파일 선택 (.xlsx)</label>
+              <label for="excelFile" class="custom-file-upload">
+                <i class="fa fa-file-excel-o"></i> 엑셀 파일 선택하기
+              </label>
+              <input type="file" id="excelFile" accept=".xlsx" required />
+              <div class="file-selected" id="fileSelected">
+                파일이 선택되지 않았습니다.
+              </div>
+            </div>
+            <div class="button-container">
+              <button type="submit" class="action-button" id="submitButton">
+                파일 변환 시작
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-bar">
+            <div class="progress" id="progressBar">0%</div>
+          </div>
+          <div class="spinner"></div>
+          <div class="progress-text" id="progressText">파일 처리 중...</div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="result-section" id="resultSection">
+          <h2 class="result-title">변환된 CSV 파일</h2>
+          <p>처리가 완료되었습니다. ZIP 파일이 자동으로 다운로드됩니다.</p>
+          <ul class="file-list" id="fileList">
+            <!-- 결과 파일 목록이 JavaScript로 추가됨 -->
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 파일 입력 필드 변경 감지
+      document
+        .getElementById("excelFile")
+        .addEventListener("change", function () {
+          const fileSelected = document.getElementById("fileSelected");
+          if (this.files.length > 0) {
+            fileSelected.textContent = this.files[0].name;
+            fileSelected.style.display = "block";
+          } else {
+            fileSelected.textContent = "파일이 선택되지 않았습니다.";
+            fileSelected.style.display = "none";
+          }
+        });
+
+      document
+        .getElementById("excelSplitForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+
+          const excelFile = document.getElementById("excelFile").files[0];
+
+          if (!excelFile) {
+            showError("엑셀 파일을 선택해주세요.");
+            return;
+          }
+
+          if (excelFile.size > 100 * 1024 * 1024) {
+            // 100MB 제한
+            showError("100MB 이하의 파일만 업로드 가능합니다.");
+            return;
+          }
+
+          // UI 업데이트
+          const submitButton = document.getElementById("submitButton");
+          const progressContainer =
+            document.getElementById("progressContainer");
+          const resultSection = document.getElementById("resultSection");
+          const errorMessage = document.getElementById("errorMessage");
+
+          submitButton.disabled = true;
+          progressContainer.style.display = "block";
+          resultSection.style.display = "none";
+          errorMessage.style.display = "none";
+
+          // 진행 상태 초기화
+          const progressBar = document.getElementById("progressBar");
+          const progressText = document.getElementById("progressText");
+
+          progressBar.style.width = "0%";
+          progressBar.textContent = "0%";
+          progressText.textContent = "파일 처리 중...";
+
+          const formData = new FormData();
+          formData.append("file", excelFile);
+          formData.append("maxRows", "100000"); // 고정값 10만 행으로 설정
+
+          // API 호출
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "/api/excel/split", true);
+
+          // 진행 상황 업데이트
+          xhr.upload.onprogress = function (e) {
+            if (e.lengthComputable) {
+              const percentComplete = Math.round((e.loaded / e.total) * 100);
+              progressBar.style.width = percentComplete + "%";
+              progressBar.textContent = percentComplete + "%";
+              progressText.textContent =
+                "파일 업로드 중... " + percentComplete + "%";
+            }
+          };
+
+          // 업로드 완료 후 서버 처리 중 상태 표시
+          xhr.upload.onload = function () {
+            progressText.textContent = "업로드 완료. 서버에서 파일 처리 중...";
+            // 진행 표시를 위한 애니메이션 효과
+            animateProgress();
+          };
+
+          xhr.onload = function () {
+            // 진행 애니메이션 타이머 정리
+            if (window.progressInterval) {
+              clearInterval(window.progressInterval);
+              window.progressInterval = null;
+            }
+
+            if (xhr.status === 200) {
+              try {
+                const response = JSON.parse(xhr.responseText);
+
+                if (response.success) {
+                  progressText.textContent =
+                    "처리 완료! 다운로드가 시작됩니다...";
+                  progressBar.style.width = "100%";
+                  progressBar.textContent = "100%";
+
+                  // 결과 섹션 표시
+                  resultSection.style.display = "block";
+
+                  // 세션 ID 저장
+                  const sessionId = response.sessionId;
+
+                  // 자동으로 ZIP 파일 다운로드 시작
+                  setTimeout(function () {
+                    // 로딩 표시 제거
+                    progressContainer.style.display = "none";
+
+                    window.location.href =
+                      "/api/excel/download-all?sessionId=" +
+                      encodeURIComponent(sessionId);
+                  }, 1000); // 1초 후 다운로드 시작
+                } else {
+                  showError(
+                    response.message || "파일 처리 중 오류가 발생했습니다."
+                  );
+                }
+              } catch (e) {
+                showError("서버 응답을 처리할 수 없습니다.");
+              }
+            } else {
+              showError("서버 오류: " + xhr.status);
+            }
+
+            submitButton.disabled = false;
+          };
+
+          xhr.onerror = function () {
+            // 진행 애니메이션 타이머 정리
+            if (window.progressInterval) {
+              clearInterval(window.progressInterval);
+              window.progressInterval = null;
+            }
+
+            showError("네트워크 오류가 발생했습니다.");
+            submitButton.disabled = false;
+          };
+
+          xhr.send(formData);
+        });
+
+      // 서버 처리 중 진행 표시를 위한 애니메이션 함수
+      function animateProgress() {
+        let progress = 0;
+        const bar = document.getElementById("progressBar");
+
+        // 서버 처리 중 진행 상황 표시를 위한 애니메이션
+        const interval = setInterval(function () {
+          progress += 0.5;
+          if (progress >= 90) {
+            clearInterval(interval);
+            return;
+          }
+
+          bar.style.width = progress + "%";
+          bar.textContent = Math.round(progress) + "%";
+        }, 300);
+
+        // 전역 변수에 저장하여 나중에 정리할 수 있도록 함
+        window.progressInterval = interval;
+      }
+
+      function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + " B";
+        else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + " KB";
+        else return (bytes / 1048576).toFixed(2) + " MB";
+      }
+
+      function showError(message) {
+        const errorMessage = document.getElementById("errorMessage");
+        errorMessage.textContent = message;
+        errorMessage.style.display = "block";
+
+        const progressText = document.getElementById("progressText");
+        progressText.textContent = "오류 발생";
+
+        const progressBar = document.getElementById("progressBar");
+        progressBar.style.backgroundColor = "#f44336";
+      }
+    </script>
+  </body>
+</html>

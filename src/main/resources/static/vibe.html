@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>루나르트 정산 시스템 - 바이브</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      /* 공통 스타일 */
+      body {
+        font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        min-height: 100vh;
+        background-color: #f8f9fa;
+        color: #333;
+      }
+
+      /* 사이드바 스타일 */
+      .sidebar {
+        width: 250px;
+        background: linear-gradient(135deg, #2c3e50, #1e272e);
+        color: white;
+        padding: 20px 0;
+        min-height: 100vh;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+
+      .sidebar-title {
+        padding: 0 20px;
+        margin-bottom: 15px;
+        font-size: 20px;
+        text-align: center;
+        font-weight: bold;
+        color: #ecf0f1;
+      }
+
+      .separator {
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.05),
+          rgba(255, 255, 255, 0.2),
+          rgba(255, 255, 255, 0.05)
+        );
+        margin: 15px 20px;
+      }
+
+      .menu-group {
+        margin-bottom: 25px;
+      }
+
+      .menu-title {
+        padding: 12px 20px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: #bdc3c7;
+        font-size: 16px;
+      }
+
+      .menu-title:hover {
+        color: #ecf0f1;
+      }
+
+      .menu-items {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .menu-item {
+        padding: 10px 35px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .menu-item::before {
+        content: "";
+        position: absolute;
+        left: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.3);
+        transition: all 0.2s ease;
+      }
+
+      .menu-item.active {
+        background: linear-gradient(90deg, #3498db, rgba(52, 152, 219, 0.7));
+      }
+
+      .menu-item.active::before {
+        background-color: white;
+      }
+
+      .menu-item:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .menu-item a {
+        color: #ecf0f1;
+        text-decoration: none;
+        display: block;
+        width: 100%;
+        transition: all 0.3s;
+      }
+
+      /* 메인 콘텐츠 스타일 */
+      .main-content {
+        flex: 1;
+        padding: 30px;
+        background-color: #f8f9fa;
+      }
+
+      /* 페이지 특화 스타일 */
+      .container {
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+        padding: 25px;
+        margin-bottom: 30px;
+        transition: all 0.3s ease;
+      }
+
+      .container:hover {
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+      }
+
+      .title {
+        font-size: 28px;
+        margin-bottom: 25px;
+        color: #2c3e50;
+        font-weight: 600;
+        position: relative;
+        padding-bottom: 10px;
+      }
+
+      .title::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 60px;
+        height: 3px;
+        background: linear-gradient(90deg, #3498db, #2980b9);
+        border-radius: 3px;
+      }
+
+      .action-buttons {
+        display: flex;
+        margin-bottom: 25px;
+        gap: 15px;
+        flex-wrap: wrap;
+      }
+
+      .upload-button {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+        box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+      }
+
+      .upload-button:hover {
+        background: linear-gradient(135deg, #2980b9, #2471a3);
+        transform: translateY(-2px);
+        box-shadow: 0 5px 12px rgba(52, 152, 219, 0.4);
+      }
+
+      .upload-button:active {
+        transform: translateY(0);
+        box-shadow: 0 3px 6px rgba(52, 152, 219, 0.3);
+      }
+
+      .search-section {
+        display: flex;
+        margin-bottom: 25px;
+        gap: 15px;
+        background-color: #f1f3f5;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      .search-select,
+      .search-input {
+        padding: 12px;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+      }
+
+      .search-select {
+        width: 180px;
+        background-color: white;
+        color: #333;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 35px;
+      }
+
+      .search-input {
+        flex-grow: 1;
+        background-color: white;
+        padding-left: 15px;
+      }
+
+      .search-select:focus,
+      .search-input:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+      }
+
+      .table-container {
+        overflow-x: auto;
+        margin-bottom: 25px;
+        border-radius: 8px;
+        box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        min-width: 1000px;
+      }
+
+      th,
+      td {
+        border: none;
+        padding: 14px 15px;
+        text-align: left;
+        transition: all 0.3s ease;
+      }
+
+      th {
+        background-color: #edf2f7;
+        color: #2c3e50;
+        font-weight: 600;
+        font-size: 14px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      tr {
+        border-bottom: 1px solid #edf2f7;
+      }
+
+      tr:last-child {
+        border-bottom: none;
+      }
+
+      tr:hover td {
+        background-color: #f8fafc;
+      }
+
+      td {
+        color: #4a5568;
+        font-size: 14px;
+      }
+
+      tr:nth-child(even) {
+        background-color: #fafbfc;
+      }
+
+      .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 30px;
+      }
+
+      .pagination button {
+        padding: 8px 14px;
+        border: none;
+        background-color: white;
+        cursor: pointer;
+        border-radius: 6px;
+        color: #4a5568;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+      }
+
+      .pagination button.active {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+      }
+
+      .pagination button:hover:not(.active):not(:disabled) {
+        background-color: #edf2f7;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .pagination button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* 편집 모드 스타일 */
+      .edit-mode {
+        padding: 0 !important;
+      }
+
+      .edit-cell {
+        position: relative;
+      }
+
+      .edit-cell input {
+        width: 100%;
+        padding: 12px;
+        box-sizing: border-box;
+        border: 2px solid #3498db;
+        outline: none;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+
+      .edit-buttons {
+        display: flex;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        z-index: 20;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border-radius: 0 0 4px 4px;
+        overflow: hidden;
+      }
+
+      .save-button,
+      .cancel-button {
+        padding: 8px 14px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 500;
+      }
+
+      .save-button {
+        background-color: #2ecc71;
+        color: white;
+      }
+
+      .save-button:hover {
+        background-color: #27ae60;
+      }
+
+      .cancel-button {
+        background-color: #e74c3c;
+        color: white;
+      }
+
+      .cancel-button:hover {
+        background-color: #c0392b;
+      }
+
+      /* 반응형 디자인 */
+      @media (max-width: 768px) {
+        body {
+          flex-direction: column;
+        }
+        .sidebar {
+          width: 100%;
+          min-height: auto;
+          height: auto;
+          position: relative;
+        }
+        .main-content {
+          padding: 20px;
+        }
+        .action-buttons {
+          flex-direction: column;
+        }
+        .search-section {
+          flex-direction: column;
+        }
+        .search-select {
+          width: 100%;
+        }
+      }
+
+      /* 다운로드 컨테이너 스타일 */
+      .download-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .company-select {
+        padding: 12px;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        background-color: white;
+        color: #333;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 35px;
+        min-width: 150px;
+      }
+
+      .company-select:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+      }
+
+      /* 로딩 스피너 애니메이션 */
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* 편집 가능한 셀 스타일 */
+      .editable {
+        position: relative;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .editable:hover {
+        background-color: rgba(52, 152, 219, 0.1);
+      }
+
+      .editable:hover::after {
+        content: "✎";
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        color: #3498db;
+        opacity: 0.7;
+      }
+
+      /* 테이블 헤더 첫번째/마지막 셀 라운드 처리 */
+      th:first-child {
+        border-top-left-radius: 8px;
+      }
+
+      th:last-child {
+        border-top-right-radius: 8px;
+      }
+
+      /* 테이블 바디 마지막 행의 셀 라운드 처리 */
+      tr:last-child td:first-child {
+        border-bottom-left-radius: 8px;
+      }
+
+      tr:last-child td:last-child {
+        border-bottom-right-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar">
+      <div class="sidebar-title">루나르트 파일 작업</div>
+      <div class="separator"></div>
+      <div class="menu-group">
+        <div class="menu-title">파일 변환</div>
+        <ul class="menu-items">
+          <li class="menu-item"><a href="/melon.html">멜론</a></li>
+          <li class="menu-item"><a href="/genie.html">지니</a></li>
+          <li class="menu-item active"><a href="/vibe.html">바이브</a></li>
+          <li class="menu-item"><a href="/flo.html">플로</a></li>
+        </ul>
+      </div>
+      <div class="menu-group">
+        <div class="menu-title">파일 분할</div>
+        <ul class="menu-items">
+          <li class="menu-item"><a href="/shorts.html">유튜브 쇼츠</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="container">
+        <h1 class="title">바이브 정산 데이터</h1>
+        <div class="action-buttons">
+          <input
+            type="file"
+            id="fileInput"
+            style="display: none"
+            accept=".xlsx, .xls"
+          />
+          <button
+            class="upload-button"
+            onclick="document.getElementById('fileInput').click()"
+          >
+            파일 업로드
+          </button>
+          <div class="download-container">
+            <select id="companySelect" class="company-select">
+              <option value="수호GRP">수호GRP</option>
+              <option value="루나르트">루나르트</option>
+            </select>
+            <button class="upload-button" onclick="exportToCSV()">
+              CSV 다운로드
+            </button>
+          </div>
+        </div>
+        <div class="search-section">
+          <select id="searchColumn" class="search-select">
+            <option value="all">전체</option>
+            <option value="songName">곡명</option>
+            <option value="albumName">앨범명</option>
+            <option value="artistName">아티스트명</option>
+            <option value="companyName">업체명</option>
+            <option value="agencyName">기획사명</option>
+          </select>
+          <input
+            type="text"
+            id="searchInput"
+            class="search-input"
+            placeholder="검색어를 입력하세요"
+          />
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>정산 월</th>
+                <th>서비스 월</th>
+                <th>업체코드</th>
+                <th>업체명</th>
+                <th>기획사코드</th>
+                <th>기획사명</th>
+                <th>계약코드</th>
+                <th>계약명</th>
+                <th>채널명</th>
+                <th>서비스코드</th>
+                <th>상품코드</th>
+                <th>서비스명</th>
+                <th>뮤비여부</th>
+                <th>무료여부</th>
+                <th>곡코드</th>
+                <th>업체곡코드</th>
+                <th>UCI</th>
+                <th>곡명</th>
+                <th>앨범코드</th>
+                <th>업체앨범코드</th>
+                <th>앨범명</th>
+                <th>아티스트명</th>
+                <th>히트수</th>
+                <th>인접권료</th>
+              </tr>
+            </thead>
+            <tbody id="dataBody">
+              <!-- 데이터는 JavaScript로 동적으로 추가됨 -->
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination">
+          <!-- 페이지네이션 버튼은 JavaScript로 동적으로 추가됨 -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 데이터 변수
+      let currentData = [];
+      let filteredData = [];
+      const itemsPerPage = 20;
+      let currentPage = 1;
+
+      // 파일 업로드 이벤트 리스너
+      document
+        .getElementById("fileInput")
+        .addEventListener("change", handleFileUpload);
+
+      function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        // 로딩 화면 표시를 위한 요소 생성
+        const loadingOverlay = document.createElement("div");
+        loadingOverlay.style.position = "fixed";
+        loadingOverlay.style.top = "0";
+        loadingOverlay.style.left = "0";
+        loadingOverlay.style.width = "100%";
+        loadingOverlay.style.height = "100%";
+        loadingOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+        loadingOverlay.style.display = "flex";
+        loadingOverlay.style.justifyContent = "center";
+        loadingOverlay.style.alignItems = "center";
+        loadingOverlay.style.zIndex = "9999";
+
+        const loadingContent = document.createElement("div");
+        loadingContent.style.backgroundColor = "white";
+        loadingContent.style.padding = "20px";
+        loadingContent.style.borderRadius = "8px";
+        loadingContent.style.textAlign = "center";
+
+        const spinner = document.createElement("div");
+        spinner.className = "spinner";
+        spinner.style.margin = "10px auto";
+        spinner.style.width = "50px";
+        spinner.style.height = "50px";
+        spinner.style.border = "5px solid rgba(76, 175, 80, 0.3)";
+        spinner.style.borderRadius = "50%";
+        spinner.style.borderTopColor = "#4caf50";
+        spinner.style.animation = "spin 1s ease-in-out infinite";
+
+        const loadingText = document.createElement("p");
+        loadingText.textContent = "파일 처리 중...";
+        loadingText.style.margin = "10px 0 0";
+        loadingText.style.color = "#333";
+
+        loadingContent.appendChild(spinner);
+        loadingContent.appendChild(loadingText);
+        loadingOverlay.appendChild(loadingContent);
+        document.body.appendChild(loadingOverlay);
+
+        fetch("/api/csv/upload-vibe", {
+          method: "POST",
+          body: formData,
+        })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then((data) => {
+            if (!data) {
+              throw new Error("데이터가 비어있습니다.");
+            }
+            currentData = processData(data);
+            displayData();
+            setupPagination();
+            // 로딩 화면 제거
+            document.body.removeChild(loadingOverlay);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            // 로딩 화면 제거
+            document.body.removeChild(loadingOverlay);
+            alert("파일 업로드 중 오류가 발생했습니다: " + error.message);
+          })
+          .finally(() => {
+            event.target.value = "";
+          });
+      }
+
+      function processData(data) {
+        // 서버에서 이미 정산월을 처리했으므로 클라이언트에서는 별도 처리 없이 데이터 전달
+        filteredData = data;
+        return data;
+      }
+
+      // 검색 기능
+      document
+        .getElementById("searchInput")
+        .addEventListener("input", handleSearch);
+      document
+        .getElementById("searchColumn")
+        .addEventListener("change", handleSearch);
+
+      function handleSearch() {
+        const searchTerm = document
+          .getElementById("searchInput")
+          .value.toLowerCase();
+        const searchColumn = document.getElementById("searchColumn").value;
+
+        filteredData = currentData.filter((row) => {
+          if (searchColumn === "all") {
+            return Object.values(row).some((value) =>
+              String(value).toLowerCase().includes(searchTerm)
+            );
+          } else {
+            return String(row[searchColumn] || "")
+              .toLowerCase()
+              .includes(searchTerm);
+          }
+        });
+
+        currentPage = 1;
+        displayData();
+        setupPagination();
+      }
+
+      function displayData() {
+        const tbody = document.getElementById("dataBody");
+        tbody.innerHTML = "";
+
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const pageData = filteredData.slice(startIndex, endIndex);
+
+        pageData.forEach((row, index) => {
+          const tr = document.createElement("tr");
+          const rowIndex = startIndex + index;
+          tr.dataset.index = rowIndex;
+
+          const cells = [
+            { key: "settlementMonth", editable: false },
+            { key: "serviceMonth", editable: false },
+            { key: "companyCode", editable: true },
+            { key: "companyName", editable: true },
+            { key: "agencyCode", editable: true },
+            { key: "agencyName", editable: true },
+            { key: "contractCode", editable: true },
+            { key: "contractName", editable: true },
+            { key: "channelName", editable: true },
+            { key: "serviceCode", editable: true },
+            { key: "productCode", editable: true },
+            { key: "serviceName", editable: true },
+            { key: "isVideo", editable: true },
+            { key: "isFree", editable: true },
+            { key: "songCode", editable: true },
+            { key: "companySongCode", editable: true },
+            { key: "uci", editable: true },
+            { key: "songName", editable: true },
+            { key: "albumCode", editable: true },
+            { key: "companyAlbumCode", editable: true },
+            { key: "albumName", editable: true },
+            { key: "artistName", editable: true },
+            { key: "hitCount", editable: true },
+            { key: "copyrightFee", editable: true },
+          ];
+
+          tr.innerHTML = cells
+            .map((cell) => {
+              const value = row[cell.key] || "";
+              return cell.editable
+                ? `<td class="editable" onclick="editCell(this)" data-key="${cell.key}">${value}</td>`
+                : `<td>${value}</td>`;
+            })
+            .join("");
+
+          tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll("#dataBody .editable").forEach((cell) => {
+          cell.onclick = () => editCell(cell);
+        });
+      }
+
+      function editCell(cell) {
+        if (cell.classList.contains("edit-mode")) return;
+
+        const originalValue = cell.textContent;
+        const key = cell.dataset.key;
+
+        const currentEditCell = document.querySelector("#dataBody .edit-mode");
+        if (currentEditCell) {
+          cancelEdit(
+            currentEditCell,
+            currentEditCell.querySelector("input").value
+          );
+        }
+
+        cell.classList.add("edit-mode", "edit-cell");
+
+        const input = document.createElement("input");
+        input.value = originalValue;
+        input.type = "text";
+
+        const saveButton = document.createElement("button");
+        saveButton.textContent = "저장";
+        saveButton.className = "save-button";
+
+        const cancelButton = document.createElement("button");
+        cancelButton.textContent = "취소";
+        cancelButton.className = "cancel-button";
+
+        const buttonsContainer = document.createElement("div");
+        buttonsContainer.className = "edit-buttons";
+        buttonsContainer.appendChild(saveButton);
+        buttonsContainer.appendChild(cancelButton);
+
+        const container = document.createElement("div");
+        container.style.position = "relative";
+        container.appendChild(input);
+        container.appendChild(buttonsContainer);
+
+        cell.innerHTML = "";
+        cell.appendChild(container);
+        input.focus();
+
+        saveButton.onclick = () => saveEdit(cell, input.value, key);
+        cancelButton.onclick = () => cancelEdit(cell, originalValue);
+
+        input.onkeydown = (e) => {
+          if (e.key === "Enter") saveEdit(cell, input.value, key);
+          if (e.key === "Escape") cancelEdit(cell, originalValue);
+        };
+      }
+
+      function saveEdit(cell, value, key) {
+        const rowIndex = parseInt(cell.parentElement.dataset.index);
+        const row = filteredData[rowIndex];
+
+        row[key] = value;
+        currentData[currentData.indexOf(row)][key] = value;
+
+        cell.classList.remove("edit-mode", "edit-cell");
+        const newTd = document.createElement("td");
+        newTd.className = "editable";
+        newTd.dataset.key = key;
+        newTd.textContent = value;
+        newTd.onclick = () => editCell(newTd);
+        cell.parentNode.replaceChild(newTd, cell);
+      }
+
+      function cancelEdit(cell, originalValue) {
+        cell.classList.remove("edit-mode", "edit-cell");
+        const newTd = document.createElement("td");
+        newTd.className = "editable";
+        newTd.dataset.key = cell.dataset.key;
+        newTd.textContent = originalValue;
+        newTd.onclick = () => editCell(newTd);
+        cell.parentNode.replaceChild(newTd, cell);
+      }
+
+      function exportToCSV() {
+        const BOM = "\uFEFF";
+        const companyName = document.getElementById("companySelect").value;
+        const pageType = "vibe";
+
+        // 데이터에서 정산월 추출 (첫 번째 행의 정산월 사용)
+        let settlementMonth = "000000";
+        if (filteredData.length > 0) {
+          settlementMonth = filteredData[0].settlementMonth || "000000";
+        }
+
+        // 파일 이름 생성: 정산월_페이지이름_회사이름.csv
+        const fileName = `${settlementMonth}_${pageType}_${companyName}.csv`;
+
+        const headers = [
+          "정산 월",
+          "서비스 월",
+          "업체코드",
+          "업체명",
+          "기획사코드",
+          "기획사명",
+          "계약코드",
+          "계약명",
+          "채널명",
+          "서비스코드",
+          "상품코드",
+          "서비스명",
+          "뮤비여부",
+          "무료여부",
+          "곡코드",
+          "업체곡코드",
+          "UCI",
+          "곡명",
+          "앨범코드",
+          "업체앨범코드",
+          "앨범명",
+          "아티스트명",
+          "히트수",
+          "인접권료",
+        ];
+
+        const csvContent = filteredData.map((row) => {
+          return [
+            row.settlementMonth,
+            row.serviceMonth,
+            row.companyCode,
+            row.companyName,
+            row.agencyCode,
+            row.agencyName,
+            row.contractCode,
+            row.contractName,
+            row.channelName,
+            row.serviceCode,
+            row.productCode,
+            row.serviceName,
+            row.isVideo,
+            row.isFree,
+            row.songCode,
+            row.companySongCode,
+            row.uci,
+            row.songName,
+            row.albumCode,
+            row.companyAlbumCode,
+            row.albumName,
+            row.artistName,
+            row.hitCount,
+            row.copyrightFee,
+          ]
+            .map((cell) => `"${cell || ""}"`)
+            .join(",");
+        });
+
+        const csv = BOM + [headers.join(","), ...csvContent].join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.setAttribute("hidden", "");
+        a.setAttribute("href", url);
+        a.setAttribute("download", fileName);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }
+
+      function setupPagination() {
+        const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+        const pagination = document.getElementById("pagination");
+        pagination.innerHTML = "";
+
+        if (currentPage > 1) {
+          addPaginationButton("이전", currentPage - 1);
+        }
+
+        for (let i = 1; i <= totalPages; i++) {
+          if (
+            i === 1 ||
+            i === totalPages ||
+            (i >= currentPage - 2 && i <= currentPage + 2)
+          ) {
+            addPaginationButton(i, i);
+          } else if (i === currentPage - 3 || i === currentPage + 3) {
+            addPaginationButton("...", null);
+          }
+        }
+
+        if (currentPage < totalPages) {
+          addPaginationButton("다음", currentPage + 1);
+        }
+      }
+
+      function addPaginationButton(text, pageNumber) {
+        const button = document.createElement("button");
+        button.textContent = text;
+
+        if (pageNumber === null) {
+          button.disabled = true;
+        } else {
+          if (pageNumber === currentPage) {
+            button.classList.add("active");
+          }
+          button.addEventListener("click", () => {
+            currentPage = pageNumber;
+            displayData();
+            setupPagination();
+          });
+        }
+
+        document.getElementById("pagination").appendChild(button);
+      }
+    </script>
+  </body>
+</html>
