@@ -1,7 +1,11 @@
 package com.rhoonart.plplsettlement.controller;
 
+import com.rhoonart.plplsettlement.service.ExcelService;
+import com.rhoonart.plplsettlement.service.ExclusionListService;
+import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,7 +17,10 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/vibe")
+@RequiredArgsConstructor
 public class VibeController {
+    private final ExcelService excelService;
+    private final ExclusionListService exclusionListService;
 
     @PostMapping("/upload")
     public List<Map<String, String>> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
@@ -215,5 +222,37 @@ public class VibeController {
             default:
                 return "0";
         }
+    }
+
+    @PostMapping("/exclusions/upload")
+    public ResponseEntity<Map<String, Object>> uploadExclusions(@RequestParam("file") MultipartFile file) {
+        exclusionListService.addExclusionsFromFile("vibe", file);
+        return ResponseEntity.ok(Map.of(
+            "message", "제외 리스트가 업로드되었습니다.",
+            "exclusions", exclusionListService.getExclusionList("vibe")
+        ));
+    }
+
+    @GetMapping("/exclusions")
+    public ResponseEntity<List<String>> getExclusions() {
+        return ResponseEntity.ok(exclusionListService.getExclusionList("vibe"));
+    }
+
+    @DeleteMapping("/exclusions/{exclusion}")
+    public ResponseEntity<Map<String, Object>> removeExclusion(@PathVariable String exclusion) {
+        exclusionListService.removeExclusion("vibe", exclusion);
+        return ResponseEntity.ok(Map.of(
+            "message", "제외 항목이 삭제되었습니다.",
+            "exclusions", exclusionListService.getExclusionList("vibe")
+        ));
+    }
+
+    @DeleteMapping("/exclusions")
+    public ResponseEntity<Map<String, Object>> clearExclusions() {
+        exclusionListService.clearExclusionList("vibe");
+        return ResponseEntity.ok(Map.of(
+            "message", "제외 리스트가 초기화되었습니다.",
+            "exclusions", exclusionListService.getExclusionList("vibe")
+        ));
     }
 } 

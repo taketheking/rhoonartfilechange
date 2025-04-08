@@ -25,10 +25,11 @@
         padding: 20px 0;
         min-height: 100vh;
         box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-        position: sticky;
+        position: fixed;
         top: 0;
+        left: 0;
         height: 100vh;
+        z-index: 1000;
       }
 
       .sidebar-title {
@@ -119,6 +120,9 @@
         flex: 1;
         padding: 30px;
         background-color: #f8f9fa;
+        margin-left: 250px;
+        min-width: 1000px;
+        overflow-x: auto;
       }
 
       /* 페이지 특화 스타일 */
@@ -386,11 +390,11 @@
         }
         .sidebar {
           width: 100%;
-          min-height: auto;
           height: auto;
           position: relative;
         }
         .main-content {
+          margin-left: 0;
           padding: 20px;
         }
         .action-buttons {
@@ -512,17 +516,53 @@
             style="display: none"
             accept=".xlsx, .xls"
           />
+          <input
+            type="file"
+            id="exclusionListInput"
+            style="display: none"
+            accept=".csv, .xlsx, .xls"
+          />
           <button
             class="upload-button"
             onclick="document.getElementById('fileInput').click()"
           >
             파일 업로드
           </button>
+          <button
+            class="upload-button"
+            onclick="document.getElementById('exclusionListInput').click()"
+          >
+            제외 리스트 업로드
+          </button>
+          <button
+            class="upload-button"
+            onclick="saveExclusionList()"
+            id="saveExclusionListBtn"
+            style="display: none;"
+          >
+            제외 리스트 저장
+          </button>
+          <button
+            class="upload-button"
+            onclick="clearExclusionList()"
+            id="clearExclusionListBtn"
+            style="display: none;"
+          >
+            제외 리스트 제거
+          </button>
+          <button
+            class="upload-button"
+            onclick="showExclusionListInfo()"
+            id="showExclusionListBtn"
+            style="display: none;"
+          >
+            제외 리스트 정보
+          </button>
           <div class="download-container">
-            <select id="companySelect" class="company-select">
+            <!-- <select id="companySelect" class="company-select">
               <option value="수호GRP">수호GRP</option>
               <option value="루나르트">루나르트</option>
-            </select>
+            </select> -->
             <button class="upload-button" onclick="exportToCSV()">
               CSV 다운로드
             </button>
@@ -593,8 +633,39 @@
       // 데이터 변수
       let currentData = [];
       let filteredData = [];
+      let trackExclusionList = []; // 제외할 트랙코드 리스트 (업체곡코드와 매칭)
+      let albumExclusionList = []; // 제외할 음반코드 리스트 (업체앨범코드와 매칭)
       const itemsPerPage = 20;
       let currentPage = 1;
+      
+      // 페이지 로드 시 저장된 제외 리스트 불러오기
+      document.addEventListener('DOMContentLoaded', function() {
+        const savedExclusionList = localStorage.getItem('floExclusionList');
+        if (savedExclusionList) {
+          try {
+            const exclusionData = JSON.parse(savedExclusionList);
+            trackExclusionList = exclusionData.trackCodes || [];
+            albumExclusionList = exclusionData.albumCodes || [];
+            
+            console.log("localStorage에서 로드된 제외 리스트:", {trackCodes: trackExclusionList.length, albumCodes: albumExclusionList.length});
+            
+            if (trackExclusionList.length > 0 || albumExclusionList.length > 0) {
+              document.getElementById('saveExclusionListBtn').style.display = 'inline-block';
+              document.getElementById('clearExclusionListBtn').style.display = 'inline-block';
+              document.getElementById('showExclusionListBtn').style.display = 'inline-block';
+              
+              const trackMsg = trackExclusionList.length > 0 ? `트랙코드 ${trackExclusionList.length}개` : "";
+              const albumMsg = albumExclusionList.length > 0 ? `음반코드 ${albumExclusionList.length}개` : "";
+              const separator = trackMsg && albumMsg ? ", " : "";
+              //alert(`저장된 제외 리스트(${trackMsg}${separator}${albumMsg})가 로드되었습니다.`);
+            }
+          } catch (e) {
+            console.error('Saved exclusion list parsing error:', e);
+            trackExclusionList = [];
+            albumExclusionList = [];
+          }
+        }
+      });
 
       // 파일 업로드 이벤트 리스너
       document
@@ -647,7 +718,7 @@
         loadingOverlay.appendChild(loadingContent);
         document.body.appendChild(loadingOverlay);
 
-        fetch("/api/csv/upload-flo", {
+        fetch("/api/flo/upload", {
           method: "POST",
           body: formData,
         })
@@ -678,35 +749,58 @@
           });
       }
 
-      // 검색 기능
-      document
-        .getElementById("searchInput")
-        .addEventListener("input", handleSearch);
-      document
-        .getElementById("searchColumn")
-        .addEventListener("change", handleSearch);
+      function processData(data) {
+        // 데이터 처리
+        // 제외 리스트 필터링 적용
+        filteredData = applyExclusionFilter(data);
+        return data;
+      }
+      
+      // 제외 리스트를 적용하여 데이터 필터링하는 함수
+      function applyExclusionFilter(data) {
+        // 콘솔에 전체 리스트 대신 길이와 샘플만 출력
+        console.log("제외 리스트 적용 - 트랙코드: " + trackExclusionList.length + "개");
+        if (trackExclusionList.length > 0) {
+          console.log("트랙코드 샘플:", trackExclusionList.slice(0, 3));
+        }
+        
+        console.log("제외 리스트 적용 - 음반코드: " + albumExclusionList.length + "개");
+        if (albumExclusionList.length > 0) {
+          console.log("음반코드 샘플:", albumExclusionList.slice(0, 3));
+        }
 
-      function handleSearch() {
-        const searchTerm = document
-          .getElementById("searchInput")
-          .value.toLowerCase();
-        const searchColumn = document.getElementById("searchColumn").value;
-
-        filteredData = currentData.filter((row) => {
-          if (searchColumn === "all") {
-            return Object.values(row).some((value) =>
-              String(value).toLowerCase().includes(searchTerm)
-            );
-          } else {
-            return String(row[searchColumn] || "")
-              .toLowerCase()
-              .includes(searchTerm);
-          }
+        if (trackExclusionList.length === 0 && albumExclusionList.length === 0) {
+          return data;
+        }
+        
+        // 제외 리스트 데이터 표준화 - 양쪽 공백 제거 및 소문자 변환
+        const normalizedTrackList = trackExclusionList.map(code => 
+          String(code || "").trim().toLowerCase()
+        );
+        
+        const normalizedAlbumList = albumExclusionList.map(code => 
+          String(code || "").trim().toLowerCase()
+        );
+        
+        console.log("정규화된 트랙 제외 리스트 길이:", normalizedTrackList.length);
+        console.log("정규화된 앨범 제외 리스트 길이:", normalizedAlbumList.length);
+        
+        const filteredData = data.filter((row) => {
+          // 데이터 표준화 - 양쪽 공백 제거 및 소문자 변환
+          // 플로에서는 업체곡코드(companySongCode)와 업체앨범코드(companyAlbumCode)를 비교
+          const normalizedSongCode = String(row.companySongCode || "").trim().toLowerCase();
+          const normalizedAlbumCode = String(row.companyAlbumCode || "").trim().toLowerCase();
+          
+          // 표준화된 코드가 제외 리스트에 있는지 확인
+          const trackExcluded = normalizedTrackList.includes(normalizedSongCode);
+          const albumExcluded = normalizedAlbumList.includes(normalizedAlbumCode);
+          
+          // 제외 리스트에 없으면 true 반환 (유지), 있으면 false 반환 (제외)
+          return !(trackExcluded || albumExcluded);
         });
-
-        currentPage = 1;
-        displayData();
-        setupPagination();
+        
+        console.log(`필터링 결과: 원본 ${data.length}개, 필터링 후 ${filteredData.length}개`);
+        return filteredData;
       }
 
       function displayData() {
@@ -849,13 +943,21 @@
 
       function exportToCSV() {
         const BOM = "\uFEFF";
-        const companyName = document.getElementById("companySelect").value;
+        //const companyName = document.getElementById("companySelect").value;
         const pageType = "flo";
 
         // 데이터에서 정산월 추출 (첫 번째 행의 정산월 사용)
         let settlementMonth = "000000";
         if (filteredData.length > 0) {
           settlementMonth = filteredData[0].settlementMonth || "000000";
+        }
+
+        let companyName = "루나르트";
+        for(let i=0; i < 10; i++) {
+          if (filteredData[i].companyName.includes("수호")) {
+            companyName = "수호GRP";
+            break;
+          }
         }
 
         // 파일 이름 생성: 정산월_페이지이름_회사이름.csv
@@ -984,6 +1086,366 @@
         }
 
         document.getElementById("pagination").appendChild(button);
+      }
+
+      // 제외 리스트 업로드 이벤트 리스너
+      document
+        .getElementById("exclusionListInput")
+        .addEventListener("change", handleExclusionListUpload);
+      
+      // 제외 리스트 파일 업로드 처리
+      function handleExclusionListUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        // 로딩 화면 표시
+        const loadingOverlay = document.createElement("div");
+        loadingOverlay.style.position = "fixed";
+        loadingOverlay.style.top = "0";
+        loadingOverlay.style.left = "0";
+        loadingOverlay.style.width = "100%";
+        loadingOverlay.style.height = "100%";
+        loadingOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+        loadingOverlay.style.display = "flex";
+        loadingOverlay.style.justifyContent = "center";
+        loadingOverlay.style.alignItems = "center";
+        loadingOverlay.style.zIndex = "9999";
+
+        const loadingContent = document.createElement("div");
+        loadingContent.style.backgroundColor = "white";
+        loadingContent.style.padding = "20px";
+        loadingContent.style.borderRadius = "8px";
+        loadingContent.style.textAlign = "center";
+
+        const spinner = document.createElement("div");
+        spinner.className = "spinner";
+        spinner.style.margin = "10px auto";
+        spinner.style.width = "50px";
+        spinner.style.height = "50px";
+        spinner.style.border = "5px solid rgba(76, 175, 80, 0.3)";
+        spinner.style.borderRadius = "50%";
+        spinner.style.borderTopColor = "#4caf50";
+        spinner.style.animation = "spin 1s ease-in-out infinite";
+
+        const loadingText = document.createElement("p");
+        loadingText.textContent = "제외 리스트 처리 중...";
+        loadingText.style.margin = "10px 0 0";
+        loadingText.style.color = "#333";
+
+        loadingContent.appendChild(spinner);
+        loadingContent.appendChild(loadingText);
+        loadingOverlay.appendChild(loadingContent);
+        document.body.appendChild(loadingOverlay);
+
+        fetch("/api/csv/exclusion-list", {
+          method: "POST",
+          body: formData,
+        })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then((data) => {
+            // 받은 데이터 로깅
+            console.log("제외 리스트 응답:", {
+              트랙코드수: (data.trackCodes || []).length,
+              음반코드수: (data.albumCodes || []).length
+            });
+            
+            // 샘플 데이터 로깅 (최대 3개)
+            if (data.trackCodes && data.trackCodes.length > 0) {
+              console.log("트랙코드 샘플:", data.trackCodes.slice(0, 3));
+            }
+            if (data.albumCodes && data.albumCodes.length > 0) {
+              console.log("음반코드 샘플:", data.albumCodes.slice(0, 3));
+            }
+            
+            trackExclusionList = data.trackCodes || [];
+            albumExclusionList = data.albumCodes || [];
+            
+            // 버튼 표시 상태 업데이트
+            const showButtons = trackExclusionList.length > 0 || albumExclusionList.length > 0;
+            document.getElementById('saveExclusionListBtn').style.display = showButtons ? 'inline-block' : 'none';
+            document.getElementById('clearExclusionListBtn').style.display = showButtons ? 'inline-block' : 'none';
+            document.getElementById('showExclusionListBtn').style.display = showButtons ? 'inline-block' : 'none';
+            
+            // 현재 데이터가 있으면 필터링 적용
+            if (currentData.length > 0) {
+              filteredData = applyExclusionFilter(currentData);
+              displayData();
+              setupPagination();
+              
+              const excludedCount = currentData.length - filteredData.length;
+              if (excludedCount > 0) {
+                alert(`제외 리스트 업로드 완료!\n트랙코드 ${trackExclusionList.length}개, 음반코드 ${albumExclusionList.length}개가 로드되었습니다.\n현재 데이터에서 ${excludedCount}개 항목이 필터링되었습니다.`);
+              } else {
+                alert(`제외 리스트 업로드 완료!\n트랙코드 ${trackExclusionList.length}개, 음반코드 ${albumExclusionList.length}개가 로드되었습니다.\n현재 데이터에서 제외된 항목은 없습니다.`);
+              }
+            } else {
+              alert(`제외 리스트 업로드 완료!\n트랙코드 ${trackExclusionList.length}개, 음반코드 ${albumExclusionList.length}개가 로드되었습니다.`);
+            }
+            
+            // 로딩 화면 제거
+            document.body.removeChild(loadingOverlay);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            // 로딩 화면 제거
+            document.body.removeChild(loadingOverlay);
+            alert("제외 리스트 업로드 중 오류가 발생했습니다: " + error.message);
+          })
+          .finally(() => {
+            event.target.value = "";
+          });
+      }
+      
+      // 제외 리스트 저장 함수
+      function saveExclusionList() {
+        if (trackExclusionList.length === 0 && albumExclusionList.length === 0) {
+          alert('저장할 제외 리스트가 없습니다.');
+          return;
+        }
+        
+        try {
+          // 저장 전 콘솔에 로그
+          console.log("저장할 제외 리스트:", {
+            trackCodes: trackExclusionList.length,
+            albumCodes: albumExclusionList.length
+          });
+          
+          const exclusionData = {
+            trackCodes: trackExclusionList,
+            albumCodes: albumExclusionList
+          };
+          
+          localStorage.setItem('floExclusionList', JSON.stringify(exclusionData));
+          alert(`트랙코드 ${trackExclusionList.length}개, 음반코드 ${albumExclusionList.length}개의 제외 리스트가 저장되었습니다.`);
+        } catch (e) {
+          console.error('Exclusion list save error:', e);
+          alert('제외 리스트 저장 중 오류가 발생했습니다.');
+        }
+      }
+      
+      // 제외 리스트 제거 함수
+      function clearExclusionList() {
+        if (trackExclusionList.length === 0 && albumExclusionList.length === 0) {
+          alert('제거할 제외 리스트가 없습니다.');
+          return;
+        }
+        
+        if (confirm('제외 리스트를 제거하시겠습니까?\n현재 필터링된 데이터가 모두 표시됩니다.')) {
+          trackExclusionList = [];
+          albumExclusionList = [];
+          localStorage.removeItem('floExclusionList');
+          
+          document.getElementById('saveExclusionListBtn').style.display = 'none';
+          document.getElementById('clearExclusionListBtn').style.display = 'none';
+          document.getElementById('showExclusionListBtn').style.display = 'none';
+          
+          // 현재 데이터가 있으면 필터링을 제거하고 모든 데이터 표시
+          if (currentData.length > 0) {
+            filteredData = currentData;
+            displayData();
+            setupPagination();
+            alert('제외 리스트가 제거되었습니다.');
+          }
+        }
+      }
+      
+      // 제외 리스트 정보 표시 함수
+      function showExclusionListInfo() {
+        if (trackExclusionList.length === 0 && albumExclusionList.length === 0) {
+          alert('표시할 제외 리스트가 없습니다.');
+          return;
+        }
+
+        console.log("제외 리스트 정보 - 트랙코드 수:", trackExclusionList.length);
+        console.log("제외 리스트 정보 - 음반코드 수:", albumExclusionList.length);
+        
+        // 제외 리스트 정규화 (applyExclusionFilter와 동일한 방법)
+        const normalizedTrackList = trackExclusionList.map(code => 
+          String(code || "").trim().toLowerCase()
+        );
+        
+        const normalizedAlbumList = albumExclusionList.map(code => 
+          String(code || "").trim().toLowerCase()
+        );
+        
+        // 제외된 항목 찾기
+        const excludedItems = currentData.filter(item => {
+          // 데이터 정규화
+          const normalizedSongCode = String(item.companySongCode || "").trim().toLowerCase();
+          const normalizedAlbumCode = String(item.companyAlbumCode || "").trim().toLowerCase();
+          
+          // 정규화된 코드 비교
+          const trackExcluded = normalizedTrackList.includes(normalizedSongCode);
+          const albumExcluded = normalizedAlbumList.includes(normalizedAlbumCode);
+          
+          return trackExcluded || albumExcluded;
+        });
+        
+        // 정산금액 합계 계산
+        let totalSettlementAmount = 0;
+        excludedItems.forEach(item => {
+          const amount = parseFloat(item.settlementAmount) || 0;
+          totalSettlementAmount += amount;
+        });
+        
+        // 모달 창 생성
+        const modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        modal.style.zIndex = '9999';
+        modal.style.display = 'flex';
+        modal.style.justifyContent = 'center';
+        modal.style.alignItems = 'center';
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.backgroundColor = 'white';
+        modalContent.style.padding = '30px';
+        modalContent.style.borderRadius = '10px';
+        modalContent.style.width = '80%';
+        modalContent.style.maxWidth = '800px';
+        modalContent.style.maxHeight = '80vh';
+        modalContent.style.overflowY = 'auto';
+        modalContent.style.position = 'relative';
+        
+        const closeButton = document.createElement('button');
+        closeButton.textContent = '닫기';
+        closeButton.style.position = 'absolute';
+        closeButton.style.top = '10px';
+        closeButton.style.right = '10px';
+        closeButton.style.background = '#e74c3c';
+        closeButton.style.color = 'white';
+        closeButton.style.border = 'none';
+        closeButton.style.borderRadius = '5px';
+        closeButton.style.padding = '8px 15px';
+        closeButton.style.cursor = 'pointer';
+        closeButton.onclick = () => document.body.removeChild(modal);
+        
+        const title = document.createElement('h2');
+        title.textContent = '제외 리스트 정보';
+        title.style.marginBottom = '20px';
+        
+        const summaryDiv = document.createElement('div');
+        summaryDiv.style.marginBottom = '20px';
+        summaryDiv.style.padding = '15px';
+        summaryDiv.style.backgroundColor = '#f8f9fa';
+        summaryDiv.style.borderRadius = '8px';
+        
+        summaryDiv.innerHTML = `
+          <p><strong>트랙코드 제외 리스트:</strong> ${trackExclusionList.length}개</p>
+          <p><strong>음반코드 제외 리스트:</strong> ${albumExclusionList.length}개</p>
+          <p><strong>현재 데이터에서 제외된 항목:</strong> ${excludedItems.length}개</p>
+          <p><strong>제외된 항목의 정산금액 합계:</strong> ${totalSettlementAmount.toLocaleString()}원</p>
+        `;
+        
+        const listTitle = document.createElement('h3');
+        listTitle.textContent = '제외된 항목 목록';
+        listTitle.style.marginBottom = '10px';
+        
+        const listContainer = document.createElement('div');
+        listContainer.style.maxHeight = '300px';
+        listContainer.style.overflowY = 'auto';
+        listContainer.style.border = '1px solid #eee';
+        listContainer.style.padding = '10px';
+        listContainer.style.borderRadius = '5px';
+        
+        // 제외 항목 표시
+        if (excludedItems.length > 0) {
+          const table = document.createElement('table');
+          table.style.width = '100%';
+          table.style.borderCollapse = 'collapse';
+          
+          // 테이블 헤더
+          const thead = document.createElement('thead');
+          thead.innerHTML = `
+            <tr>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #eee;">업체곡코드</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #eee;">업체앨범코드</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #eee;">곡명</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #eee;">가수명</th>
+              <th style="padding: 8px; text-align: right; border-bottom: 2px solid #eee;">정산금액</th>
+            </tr>
+          `;
+          
+          // 테이블 바디
+          const tbody = document.createElement('tbody');
+          excludedItems.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.companySongCode || ''}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.companyAlbumCode || ''}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.songName || ''}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.artistName || ''}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${(parseFloat(item.settlementAmount) || 0).toLocaleString()}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+          
+          table.appendChild(thead);
+          table.appendChild(tbody);
+          listContainer.appendChild(table);
+        } else {
+          const noItemsMsg = document.createElement('p');
+          noItemsMsg.textContent = '현재 데이터에서 제외된 항목이 없습니다.';
+          noItemsMsg.style.padding = '10px';
+          noItemsMsg.style.color = '#666';
+          listContainer.appendChild(noItemsMsg);
+        }
+        
+        modalContent.appendChild(closeButton);
+        modalContent.appendChild(title);
+        modalContent.appendChild(summaryDiv);
+        modalContent.appendChild(listTitle);
+        modalContent.appendChild(listContainer);
+        
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+      }
+
+      // 검색 기능
+      document
+        .getElementById("searchInput")
+        .addEventListener("input", handleSearch);
+      document
+        .getElementById("searchColumn")
+        .addEventListener("change", handleSearch);
+
+      function handleSearch() {
+        const searchTerm = document
+          .getElementById("searchInput")
+          .value.toLowerCase();
+        const searchColumn = document.getElementById("searchColumn").value;
+
+        // 원본 데이터에서 제외 리스트를 먼저 필터링
+        const baseData = applyExclusionFilter(currentData);
+        
+        // 필터링된 데이터에서 검색어 적용
+        filteredData = baseData.filter((row) => {
+          if (searchColumn === "all") {
+            return Object.values(row).some((value) =>
+              String(value).toLowerCase().includes(searchTerm)
+            );
+          } else {
+            return String(row[searchColumn] || "")
+              .toLowerCase()
+              .includes(searchTerm);
+          }
+        });
+
+        currentPage = 1;
+        displayData();
+        setupPagination();
       }
     </script>
   </body>

@@ -483,70 +483,6 @@
       tr:last-child td:last-child {
         border-bottom-right-radius: 8px;
       }
-
-      /* 제외 리스트 관리 스타일 */
-      .exclusion-section {
-        margin-top: 20px;
-      }
-
-      .upload-section {
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 15px;
-      }
-
-      .file-name {
-        color: #666;
-        font-size: 14px;
-      }
-
-      .exclusion-list {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 15px;
-        max-height: 300px;
-        overflow-y: auto;
-      }
-
-      .exclusion-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px;
-        border-bottom: 1px solid #eee;
-      }
-
-      .exclusion-item:last-child {
-        border-bottom: none;
-      }
-
-      .remove-btn {
-        background: none;
-        border: none;
-        color: #dc3545;
-        cursor: pointer;
-        padding: 5px;
-        font-size: 18px;
-      }
-
-      .remove-btn:hover {
-        color: #bd2130;
-      }
-
-      .clear-all-btn {
-        margin-top: 10px;
-        background-color: #dc3545;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-      }
-
-      .clear-all-btn:hover {
-        background-color: #bd2130;
-      }
     </style>
   </head>
   <body>
@@ -623,10 +559,10 @@
             제외 리스트 정보
           </button>
           <div class="download-container">
-            <!-- <select id="companySelect" class="company-select">
+            <select id="companySelect" class="company-select">
               <option value="수호GRP">수호GRP</option>
               <option value="루나르트">루나르트</option>
-            </select> -->
+            </select>
             <button class="upload-button" onclick="exportToCSV()">
               CSV 다운로드
             </button>
@@ -1099,21 +1035,13 @@
 
       function exportToCSV() {
         const BOM = "\uFEFF";
-        //const companyName = document.getElementById("companySelect").value;
+        const companyName = document.getElementById("companySelect").value;
         const pageType = "melon";
 
         // 데이터에서 정산월 추출 (첫 번째 행의 정산월 사용)
         let settlementMonth = "000000";
         if (filteredData.length > 0) {
           settlementMonth = filteredData[0].settlementMonth || "000000";
-        }
-
-        let companyName = "루나르트";
-        for(let i=0; i < 10; i++) {
-          if (filteredData[i].label.includes("수호")) {
-            companyName = "수호GRP";
-            break;
-          }
         }
 
         // 파일 이름 생성: 정산월_페이지이름_회사이름.csv
@@ -1396,114 +1324,6 @@
         
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
-      }
-
-      // 제외 리스트 관리 스크립트
-      document.addEventListener('DOMContentLoaded', function() {
-        loadExclusionList();
-        
-        // 파일 선택 이벤트 리스너
-        document.getElementById('exclusionFile').addEventListener('change', function(e) {
-          const file = e.target.files[0];
-          if (file) {
-            document.getElementById('exclusionFileName').textContent = file.name;
-            uploadExclusionFile(file);
-          }
-        });
-      });
-
-      function loadExclusionList() {
-        fetch('/api/melon/exclusions')
-          .then(response => response.json())
-          .then(exclusions => {
-            displayExclusionList(exclusions);
-          })
-          .catch(error => {
-            console.error('제외 리스트 로딩 실패:', error);
-            showError('제외 리스트를 불러오는데 실패했습니다.');
-          });
-      }
-
-      function uploadExclusionFile(file) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        fetch('/api/melon/exclusions/upload', {
-          method: 'POST',
-          body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-          showSuccess(data.message);
-          displayExclusionList(data.exclusions);
-        })
-        .catch(error => {
-          console.error('업로드 실패:', error);
-          showError('파일 업로드에 실패했습니다.');
-        });
-      }
-
-      function removeExclusion(exclusion) {
-        fetch(`/api/melon/exclusions/${encodeURIComponent(exclusion)}`, {
-          method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
-          showSuccess(data.message);
-          displayExclusionList(data.exclusions);
-        })
-        .catch(error => {
-          console.error('제거 실패:', error);
-          showError('항목 제거에 실패했습니다.');
-        });
-      }
-
-      function clearExclusionList() {
-        if (!confirm('모든 제외 항목을 삭제하시겠습니까?')) {
-          return;
-        }
-
-        fetch('/api/melon/exclusions', {
-          method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
-          showSuccess(data.message);
-          displayExclusionList(data.exclusions);
-        })
-        .catch(error => {
-          console.error('초기화 실패:', error);
-          showError('제외 리스트 초기화에 실패했습니다.');
-        });
-      }
-
-      function displayExclusionList(exclusions) {
-        const container = document.getElementById('exclusionList');
-        container.innerHTML = '';
-
-        if (exclusions.length === 0) {
-          container.innerHTML = '<p style="text-align: center; color: #666;">제외 리스트가 비어있습니다.</p>';
-          return;
-        }
-
-        exclusions.forEach(exclusion => {
-          const item = document.createElement('div');
-          item.className = 'exclusion-item';
-          item.innerHTML = `
-            <span>${exclusion}</span>
-            <button class="remove-btn" onclick="removeExclusion('${exclusion}')">&times;</button>
-          `;
-          container.appendChild(item);
-        });
-
-        // 전체 삭제 버튼 추가
-        if (exclusions.length > 0) {
-          const clearButton = document.createElement('button');
-          clearButton.className = 'clear-all-btn';
-          clearButton.textContent = '전체 삭제';
-          clearButton.onclick = clearExclusionList;
-          container.appendChild(clearButton);
-        }
       }
     </script>
   </body>

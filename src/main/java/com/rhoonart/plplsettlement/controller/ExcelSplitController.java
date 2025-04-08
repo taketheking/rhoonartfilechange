@@ -24,11 +24,6 @@ import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.DocumentBuilder;
-import org.w3c.dom.Document;
-import org.w3c.dom.NodeList;
-import org.w3c.dom.Element;
 import java.io.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -44,11 +39,16 @@ import java.util.zip.ZipOutputStream;
 public class ExcelSplitController {
 
     private static final int MAX_DEFAULT_SIZE_MB = 30;
-    private static final int MAX_ALLOWED_SIZE_MB = 100;
+    private static final int MAX_ALLOWED_SIZE_MB = 500;
+    // 업로드 처리 타임아웃 설정 (10분)
+    private static final int UPLOAD_TIMEOUT_MS = 600000;
 
     static {
-        // Apache POI의 바이트 배열 최대 크기 제한을 늘림 (250MB)
-        IOUtils.setByteArrayMaxOverride(250 * 1024 * 1024);
+        // Apache POI의 바이트 배열 최대 크기 제한을 늘림 (500MB)
+        IOUtils.setByteArrayMaxOverride(500 * 1024 * 1024);
+        // 소켓 타임아웃 설정 증가
+        System.setProperty("sun.net.client.defaultConnectTimeout", "300000");
+        System.setProperty("sun.net.client.defaultReadTimeout", "300000");
     }
 
     @Value("${excel.output.dir:#{systemProperties['java.io.tmpdir']}}")
@@ -56,16 +56,16 @@ public class ExcelSplitController {
 
     @PostMapping("/split")
     public ResponseEntity<?> splitExcelToCSV(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "maxSizeMB", defaultValue = "30") int maxSizeMB) {
+            @RequestParam("files") MultipartFile[] files,
+            @RequestParam(value = "maxSizeMB", defaultValue = "29") int maxSizeMB) {
+
+        // 요청 타임아웃 증가를 위한 비동기 처리 설정
+        long startTime = System.currentTimeMillis();
+        System.out.println("파일 처리 시작: " + new Date());
 
         // 요청 검증
-        if (file.isEmpty()) {
+        if (files == null || files.length == 0) {
             return ResponseEntity.badRequest().body(createErrorResponse("파일이 비어 있습니다."));
-        }
-
-        if (!file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
-            return ResponseEntity.badRequest().body(createErrorResponse("XLSX 형식의 파일만 지원합니다."));
         }
 
         // 요청된 크기가 허용 범위 내인지 확인
@@ -74,30 +74,41 @@ public class ExcelSplitController {
         }
 
         long maxSizeBytes = maxSizeMB * 1024L * 1024L;
-        String originalFilename = file.getOriginalFilename();
-        String baseFilename = originalFilename.substring(0, originalFilename.lastIndexOf("."));
         String sessionId = UUID.randomUUID().toString();
         String sessionDir = outputDir + File.separator + sessionId;
+        List<Map<String, Object>> allResultFiles = new ArrayList<>();
 
         try {
             // 세션 디렉토리 생성
             Path sessionPath = Paths.get(sessionDir);
             Files.createDirectories(sessionPath);
 
-            // 임시 파일로 저장
-            Path tempFile = sessionPath.resolve("temp_" + originalFilename);
-            file.transferTo(tempFile.toFile());
-            
-            List<Map<String, Object>> resultFiles = processExcelFile(tempFile, sessionPath, baseFilename, maxSizeBytes);
-            
-            // 임시 파일 삭제
-            Files.deleteIfExists(tempFile);
+            // 각 파일 처리
+            for (MultipartFile file : files) {
+                if (!file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
+                    System.out.println("XLSX 형식이 아닌 파일 건너뜀: " + file.getOriginalFilename());
+                    continue;
+                }
+
+                String originalFilename = file.getOriginalFilename();
+                String baseFilename = originalFilename.substring(0, originalFilename.lastIndexOf("."));
+
+                // 임시 파일로 저장
+                Path tempFile = sessionPath.resolve("temp_" + originalFilename);
+                file.transferTo(tempFile.toFile());
+                
+                List<Map<String, Object>> resultFiles = processExcelFile(tempFile, sessionPath, baseFilename, maxSizeBytes);
+                allResultFiles.addAll(resultFiles);
+                
+                // 임시 파일 삭제
+                Files.deleteIfExists(tempFile);
+            }
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("files", resultFiles);
+            response.put("files", allResultFiles);
             response.put("sessionId", sessionId);
-            response.put("message", resultFiles.size() + "개의 CSV 파일을 생성했습니다.");
+            response.put("message", allResultFiles.size() + "개의 CSV 파일을 생성했습니다.");
             
             return ResponseEntity.ok(response);
             
@@ -296,7 +307,6 @@ public class ExcelSplitController {
         // 메모리 사용량을 줄이기 위한 SAX 파서 설정
         try {
             sheetParser.setFeature("http://apache.org/xml/features/namespaces", false);
-            sheetParser.setFeature("http://apache.org/xml/features/dom/defer-node-expansion", true);
             sheetParser.setFeature("http://xml.org/sax/features/namespaces", false);
             sheetParser.setFeature("http://xml.org/sax/features/validation", false);
             sheetParser.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
@@ -305,66 +315,13 @@ public class ExcelSplitController {
             // 오류가 발생해도 계속 진행
         }
         
-        // 마지막 행 확인 - SAX 파싱으로는 직접 확인이 어려우므로 전처리로 시트 내용 검사
-        try {
-            // sheetData를, 마지막 행 번호 찾기 위해 별도 분석 필요
-            // XSSFReader를 통해 읽은 XML 데이터에서 마지막 행 찾기
-            // <row> 태그의 최대 r 속성 값을 찾음
-            ByteArrayOutputStream tempOut = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int readLen;
-            
-            // sheetData 스트림의 내용을 복제
-            while ((readLen = sheetData.read(buffer)) != -1) {
-                tempOut.write(buffer, 0, readLen);
-            }
-            
-            // 원본 스트림 복원
-            byte[] sheetBytes = tempOut.toByteArray();
-            InputStream originalInputStream = new ByteArrayInputStream(sheetBytes);
-            InputStream copyInputStream = new ByteArrayInputStream(sheetBytes);
-            
-            // 마지막 행 번호 찾기
-            int maxRowIndex = -1;
-            try {
-                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-                factory.setNamespaceAware(false);
-                factory.setValidating(false);
-                factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-                
-                DocumentBuilder builder = factory.newDocumentBuilder();
-                Document document = builder.parse(new InputSource(copyInputStream));
-                
-                NodeList rows = document.getElementsByTagName("row");
-                for (int i = 0; i < rows.getLength(); i++) {
-                    Element row = (Element) rows.item(i);
-                    int rowIndex = Integer.parseInt(row.getAttribute("r")) - 1; // r 속성은 1부터 시작, 내부적으로는 0부터
-                    if (rowIndex > maxRowIndex) {
-                        maxRowIndex = rowIndex;
-                    }
-                }
-            } catch (Exception e) {
-                System.out.println("마지막 행 분석 중 오류: " + e.getMessage());
-                // 오류가 발생해도 계속 진행
-            }
-            
-            // 마지막 행 번호 설정
-            if (maxRowIndex >= 0) {
-                System.out.println("시트의 마지막 행 번호: " + maxRowIndex);
-                handler.setLastRowNum(maxRowIndex);
-            }
-            
-            // 원본 스트림으로 실제 파싱 진행
-            sheetSource = new InputSource(originalInputStream);
-        } catch (Exception e) {
-            System.out.println("마지막 행 검출 중 오류: " + e.getMessage());
-            // 오류 발생 시 원본 스트림 사용
-        }
-        
+        // 핸들러 연결
         ContentHandler contentHandler = new XSSFSheetXMLHandler(
                 styles, strings, handler, formatter, false);
         sheetParser.setContentHandler(contentHandler);
         
+        // 시트 처리 시작 - 행을 모두 수집한 후 마지막 행을 제외하고 CSV 생성
+        System.out.println("시트 처리 시작 - 모든 행을 수집 후 마지막 행만 제외하는 방식으로 진행");
         sheetParser.parse(sheetSource);
     }
 
@@ -392,8 +349,13 @@ public class ExcelSplitController {
         private File currentFile;
         private int fileIndex = 1;
         private long currentFileSize = 0;
-        private int lastRowNum = -1; // 마지막 행 번호를 저장하기 위한 변수
-        private boolean isProcessingLastRow = false; // 현재 처리 중인 행이 마지막 행인지 여부
+        private final int BUFFER_FLUSH_THRESHOLD = 1000; // 1000행마다 버퍼 플러시
+        
+        // 모든 데이터 행을 저장하는 리스트 (헤더 제외)
+        private List<List<String>> allRows = new ArrayList<>();
+        
+        // Video ID 컬럼 인덱스 저장
+        private int videoIdColumnIndex = -1;
         
         public CsvSplitSheetHandler(Path outputPath, String baseFilename, long maxFileSize) {
             this.outputPath = outputPath;
@@ -423,14 +385,18 @@ public class ExcelSplitController {
         public void startRow(int rowNum) {
             currentRowNum = rowNum;
             currentRow = new ArrayList<>();
-            // 현재 행이 마지막 행인지 확인
-            checkLastRow(rowNum);
         }
         
         @Override
         public void cell(String cellReference, String formattedValue, XSSFComment comment) {
             if (formattedValue == null) {
                 formattedValue = "";
+            }
+            
+            // Video ID 컬럼 인덱스 확인 (첫 행에서만)
+            if (currentRowNum == 0 && formattedValue.contains("Video ID")) {
+                videoIdColumnIndex = currentRow.size();
+                System.out.println("Video ID 컬럼 발견: 인덱스 " + videoIdColumnIndex);
             }
             
             // 셀 레퍼런스에서 컬럼 인덱스 추출
@@ -443,7 +409,7 @@ public class ExcelSplitController {
             }
             
             // CSV 용으로 포맷팅
-            formattedValue = escapeCsvValue(formattedValue);
+            formattedValue = escapeCsvValue(formattedValue, currentRow.size() == videoIdColumnIndex);
             currentRow.add(formattedValue);
         }
         
@@ -455,109 +421,189 @@ public class ExcelSplitController {
         @Override
         public void endRow(int rowNum) {
             try {
+                // 메모리 관리를 위한 명시적 GC 호출 (큰 행 처리 후)
+                if (rowNum > 0 && rowNum % 10000 == 0) {
+                    System.gc();
+                    System.out.println("메모리 정리 수행: " + rowNum + "행 처리 완료");
+                }
+                
                 // 헤더 처리
                 if (rowNum == 0) {
                     headers = new ArrayList<>(currentRow);
-                    return; // 헤더는 아직 파일에 쓰지 않음
+                    
+                    // Video ID 컬럼 인덱스 찾기
+                    for (int i = 0; i < headers.size(); i++) {
+                        if (headers.get(i).contains("Video ID")) {
+                            videoIdColumnIndex = i;
+                            System.out.println("Video ID 컬럼 발견: 인덱스 " + videoIdColumnIndex);
+                            break;
+                        }
+                    }
+                    
+                    System.out.println("헤더 행 처리 완료: " + String.join(",", headers));
+                    return;
                 }
                 
-                // 마지막 행을 처리하고 있는지 확인
-                if (isProcessingLastRow) {
-                    System.out.println("마지막 행(" + rowNum + ")은 처리하지 않습니다.");
-                    return; // 마지막 행은 처리하지 않음
+                // 데이터 행 처리
+                List<String> rowData = new ArrayList<>(currentRow);
+                
+                // Video ID 컬럼이 발견된 경우, 특수문자로 시작하는 ID 처리
+                if (videoIdColumnIndex != -1 && videoIdColumnIndex < rowData.size()) {
+                    String videoId = rowData.get(videoIdColumnIndex);
+                    if (videoId != null && videoId.length() > 0) {
+                        // =, +, - 등으로 시작하는 값 처리
+                        if (videoId.startsWith("=") || videoId.startsWith("+") || videoId.startsWith("-") || videoId.startsWith("@")) {
+                            // 앞에 작은따옴표(')를 추가하여 수식으로 해석되지 않도록 함
+                            if (!videoId.startsWith("'")) {
+                                videoId = "'" + videoId;
+                                rowData.set(videoIdColumnIndex, videoId);
+                            }
+                        }
+                    }
                 }
                 
-                // 새 파일이 필요한 경우
-                if (currentWriter == null) {
-                    createNewFile();
-                    
-                    // 헤더 쓰기
-                    String headerLine = String.join(",", headers);
-                    currentWriter.write(headerLine);
-                    currentWriter.write("\n");
-                    
-                    // 헤더 크기 계산
-                    byte[] headerBytes = (headerLine + "\n").getBytes(StandardCharsets.UTF_8);
-                    currentFileSize += headerBytes.length;
-                }
+                allRows.add(rowData);
+                // System.out.println("데이터 행 수집: " + rowNum + " (총 " + allRows.size() + "개 행)");
                 
-                // 현재 행 쓰기
-                String line = String.join(",", currentRow);
-                byte[] lineBytes = (line + "\n").getBytes(StandardCharsets.UTF_8);
+                // 메모리 관리를 위해 currentRow 초기화
+                currentRow = null;
                 
-                // 현재 파일 크기 + 새 라인 크기가 최대 크기를 초과하는 경우 새 파일 생성
-                if (currentFileSize + lineBytes.length > maxFileSize) {
-                    closeCurrentFile();
-                    createNewFile();
-                    
-                    // 헤더 쓰기
-                    String headerLine = String.join(",", headers);
-                    currentWriter.write(headerLine);
-                    currentWriter.write("\n");
-                    
-                    // 헤더 크기 계산
-                    byte[] headerBytes = (headerLine + "\n").getBytes(StandardCharsets.UTF_8);
-                    currentFileSize = headerBytes.length;
-                }
-                
-                // 행 데이터 쓰기
-                currentWriter.write(line);
-                currentWriter.write("\n");
-                currentFileSize += lineBytes.length;
-                
-            } catch (IOException e) {
-                throw new RuntimeException("CSV 파일 쓰기 오류", e);
-            }
-        }
-        
-        private void createNewFile() throws IOException {
-            String filename = baseFilename + "_split_" + fileIndex + ".csv";
-            Path filePath = outputPath.resolve(filename);
-            currentFile = filePath.toFile();
-            currentWriter = new OutputStreamWriter(new FileOutputStream(currentFile), StandardCharsets.UTF_8);
-            fileIndex++;
-        }
-        
-        private void closeCurrentFile() throws IOException {
-            if (currentWriter != null) {
-                currentWriter.flush();
-                currentWriter.close();
-                
-                // 파일 크기 기록
-                String filename = currentFile.getName();
-                createdFiles.put(filename, currentFile.length());
-                
-                currentWriter = null;
-                currentFile = null;
-                currentFileSize = 0;
+            } catch (Exception e) {
+                throw new RuntimeException("행 처리 중 오류 발생: " + e.getMessage(), e);
             }
         }
         
         @Override
         public void endSheet() {
             try {
+                System.out.println("시트 처리 완료. 총 " + allRows.size() + "개 데이터 행 수집됨.");
+                
+                // 헤더에서 컬럼 인덱스 찾기
+                int finalSettlementIndex = -1;
+                int partnerRevenueIndex = -1;
+                
+                for (int i = 0; i < headers.size(); i++) {
+                    String header = headers.get(i);
+                    if (header.contains("최종 정산금")) {
+                        finalSettlementIndex = i;
+                    } else if (header.contains("Partner Revenue (KRW)")) {
+                        partnerRevenueIndex = i;
+                    }
+                }
+                
+                // 모든 행의 최종 정산금 컬럼 값 처리
+                for (List<String> row : allRows) {
+                    if (finalSettlementIndex != -1 && finalSettlementIndex < row.size()) {
+                        String value = row.get(finalSettlementIndex);
+                        if (value != null && !value.isEmpty() && !value.matches("^[0-9.,]+$")) {
+                            row.set(finalSettlementIndex, "0");
+                        }
+                    }
+                }
+                
+                // 마지막 행이 합계 행인지 확인
+                if (!allRows.isEmpty()) {
+                    List<String> lastRow = allRows.get(allRows.size() - 1);
+                    boolean isSummaryRow = false;
+                    
+                    // 마지막 행이 합계 행인지 확인 (합계, 총계, 계 등의 단어 포함 여부)
+                    for (String cell : lastRow) {
+                        if (cell != null && (cell.contains("합계") || cell.contains("총계") || cell.contains("계"))) {
+                            isSummaryRow = true;
+                            break;
+                        }
+                    }
+                    
+                    // 최종 정산금과 Partner Revenue (KRW) 컬럼만 값이 있는 경우 제외
+                    if (finalSettlementIndex != -1 && partnerRevenueIndex != -1) {
+                        boolean onlySettlementValues = true;
+                        for (int i = 0; i < lastRow.size(); i++) {
+                            if (i != finalSettlementIndex && i != partnerRevenueIndex && 
+                                lastRow.get(i) != null && !lastRow.get(i).isEmpty()) {
+                                onlySettlementValues = false;
+                                break;
+                            }
+                        }
+                        if (onlySettlementValues) {
+                            isSummaryRow = true;
+                        }
+                    }
+                    
+                    if (isSummaryRow) {
+                        System.out.println("마지막 행이 합계 행이거나 정산금 관련 컬럼만 값이 있으므로 제외됩니다.");
+                        allRows.remove(allRows.size() - 1);
+                    }
+                }
+                
+                // CSV 파일 생성 및 데이터 쓰기
+                createNewFile();
+                
+                // 헤더 쓰기 (UTF-8 인코딩)
+                String headerLine = String.join(",", headers);
+                currentWriter.write(headerLine);
+                currentWriter.write("\n");
+                currentFileSize += (headerLine + "\n").getBytes(StandardCharsets.UTF_8).length;
+                
+                // 데이터 행 쓰기
+                for (List<String> rowData : allRows) {
+                    String line = String.join(",", rowData);
+                    byte[] lineBytes = (line + "\n").getBytes(StandardCharsets.UTF_8);
+                    
+                    // 파일 크기 제한을 초과하면 새 파일 생성
+                    if (currentFileSize + lineBytes.length > maxFileSize) {
+                        closeCurrentFile();
+                        createNewFile();
+                        
+                        // 새 파일에 헤더 쓰기
+                        currentWriter.write(headerLine);
+                        currentWriter.write("\n");
+                        currentFileSize += (headerLine + "\n").getBytes(StandardCharsets.UTF_8).length;
+                    }
+                    
+                    // 행 데이터 쓰기
+                    currentWriter.write(line);
+                    currentWriter.write("\n");
+                    currentFileSize += lineBytes.length;
+                    
+                    // 주기적으로 버퍼 플러시
+                    if (currentRowNum > 0 && currentRowNum % BUFFER_FLUSH_THRESHOLD == 0) {
+                        currentWriter.flush();
+                    }
+                }
+                
+                // 처리 완료 메시지
+                System.out.println("CSV 기록 완료. " + allRows.size() + "개 행 처리됨.");
+                
+                // 현재 열려있는 파일 닫기
                 closeCurrentFile();
+                
+                // 메모리 정리
+                allRows.clear();
+                
             } catch (IOException e) {
                 throw new RuntimeException("CSV 파일 닫기 오류", e);
             }
         }
         
-        // 마지막 행 번호 설정 메소드 추가
-        public void setLastRowNum(int lastRowNum) {
-            this.lastRowNum = lastRowNum;
-        }
-        
-        // 현재 처리 중인 행이 마지막 행인지 확인하는 메소드
-        public void checkLastRow(int rowNum) {
-            if (lastRowNum != -1 && rowNum == lastRowNum) {
-                isProcessingLastRow = true;
-                System.out.println("마지막 행 감지: " + rowNum);
-            }
-        }
-        
-        private String escapeCsvValue(String value) {
+        private String escapeCsvValue(String value, boolean isVideoId) {
             if (value == null) {
                 return "";
+            }
+            
+            // Video ID 컬럼인 경우 특수 처리
+            if (isVideoId && value.length() > 0) {
+                // =, +, - 등으로 시작하는 값이 수식으로 처리되지 않도록 보호
+                if (value.startsWith("=") || value.startsWith("+") || value.startsWith("-") || 
+                    value.startsWith("@") || value.startsWith("'")) {
+                    
+                    // 앞에 있는 작은따옴표 제거 (이미 추가된 경우)
+                    if (value.startsWith("'")) {
+                        value = value.substring(1);
+                    }
+                    
+                    // 쌍따옴표로 감싸고 내부 쌍따옴표는 이스케이프
+                    return "\"'" + value.replace("\"", "\"\"") + "\"";
+                }
             }
             
             // 쌍따옴표나 쉼표가 포함된 경우 쌍따옴표로 감싸기
@@ -572,6 +618,53 @@ public class ExcelSplitController {
         
         public Map<String, Long> getCreatedFiles() {
             return createdFiles;
+        }
+        
+        // 새 파일을 생성하는 메서드 추가
+        private void createNewFile() throws IOException {
+            // 새 파일 생성
+            String filename = baseFilename + "_split_" + fileIndex + ".csv";
+            Path filePath = outputPath.resolve(filename);
+            currentFile = filePath.toFile();
+            fileIndex++;
+            
+            // UTF-8 with BOM으로 파일 생성
+            FileOutputStream fos = new FileOutputStream(currentFile);
+            
+            // BOM 추가
+            fos.write(0xEF);
+            fos.write(0xBB);
+            fos.write(0xBF);
+            
+            // 버퍼 크기 증가 (32KB)
+            currentWriter = new BufferedWriter(
+                new OutputStreamWriter(fos, StandardCharsets.UTF_8),
+                32768
+            );
+            
+            currentFileSize = 0;
+            System.out.println("새 CSV 파일 생성: " + currentFile.getName());
+        }
+        
+        // 현재 열려있는 파일을 닫는 메서드 추가
+        private void closeCurrentFile() throws IOException {
+            if (currentWriter != null) {
+                try {
+                    currentWriter.flush();
+                    currentWriter.close();
+                    
+                    // 파일 크기 기록
+                    String filename = currentFile.getName();
+                    createdFiles.put(filename, currentFile.length());
+                    
+                    currentWriter = null;
+                    currentFile = null;
+                    currentFileSize = 0;
+                } catch (IOException e) {
+                    System.err.println("파일 닫기 중 오류 발생: " + e.getMessage());
+                    throw e;
+                }
+            }
         }
     }
 } 

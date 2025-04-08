@@ -54,8 +54,8 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         UserDetails user = User.builder()
-            .username("root")
-            .password(passwordEncoder().encode("root"))
+            .username("development@rhoonart.com")
+            .password(passwordEncoder().encode("Elqpffhq!@34"))
             .roles("ADMIN")
             .build();
 
