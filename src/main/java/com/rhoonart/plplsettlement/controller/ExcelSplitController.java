@@ -54,14 +54,18 @@ public class ExcelSplitController {
     @Value("${excel.output.dir:#{systemProperties['java.io.tmpdir']}}")
     private String outputDir;
 
+    // 최종 정산금 총 합계
+    private static List<Map<String, String>> finalAmounts;
+
+    private static double finalAmount = 0;
+    private static double KRW = 0;
+
     @PostMapping("/split")
     public ResponseEntity<?> splitExcelToCSV(
             @RequestParam("files") MultipartFile[] files,
             @RequestParam(value = "maxSizeMB", defaultValue = "29") int maxSizeMB) {
 
-        // 요청 타임아웃 증가를 위한 비동기 처리 설정
-        long startTime = System.currentTimeMillis();
-        System.out.println("파일 처리 시작: " + new Date());
+        finalAmounts = new ArrayList<>();
 
         // 요청 검증
         if (files == null || files.length == 0) {
@@ -96,7 +100,8 @@ public class ExcelSplitController {
                 // 임시 파일로 저장
                 Path tempFile = sessionPath.resolve("temp_" + originalFilename);
                 file.transferTo(tempFile.toFile());
-                
+
+                // 파일 변환
                 List<Map<String, Object>> resultFiles = processExcelFile(tempFile, sessionPath, baseFilename, maxSizeBytes);
                 allResultFiles.addAll(resultFiles);
                 
@@ -109,7 +114,9 @@ public class ExcelSplitController {
             response.put("files", allResultFiles);
             response.put("sessionId", sessionId);
             response.put("message", allResultFiles.size() + "개의 CSV 파일을 생성했습니다.");
-            
+            response.put("finalAmounts", finalAmounts);
+
+
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
@@ -276,7 +283,10 @@ public class ExcelSplitController {
                     
                     // CSV 분할 파일을 처리할 핸들러 생성
                     CsvSplitSheetHandler handler = new CsvSplitSheetHandler(
-                            sessionPath, baseFilename + "_" + sheetName, maxSizeBytes);
+                            sessionPath, baseFilename, maxSizeBytes);
+
+//                    CsvSplitSheetHandler handler = new CsvSplitSheetHandler(
+//                            sessionPath, baseFilename + "_" + sheetName, maxSizeBytes);
                     
                     processSheet(styles, strings, handler, sheetStream);
                     
@@ -446,6 +456,33 @@ public class ExcelSplitController {
                 
                 // 데이터 행 처리
                 List<String> rowData = new ArrayList<>(currentRow);
+
+                // KRW 합계 계산
+                double ad;
+                try {
+                    Double ab = Double.parseDouble(rowData.get(rowData.size() - 6));
+                    Double ac = Double.parseDouble(rowData.get(rowData.size() - 5));
+                    ad = ab*ac;
+                    rowData.set(rowData.size() - 4, Double.toString(ad));
+                    KRW += ad;
+                }
+                catch (NumberFormatException e) {
+                    KRW += 0;
+                    ad = 0;
+                }
+
+                // 최종 정산금 합계 계산
+                try {
+                    double ae = Double.parseDouble(rowData.get(rowData.size() - 3).replace("%", "")) / 100;
+                    double af = Double.parseDouble(rowData.get(rowData.size() - 2).replace("%", "")) / 100;
+
+                    double ag = (ad * ae) - ((ad * ae) * af);
+                    rowData.set(rowData.size() - 1, Double.toString(ag));
+                    finalAmount += ag;
+                }
+                catch (NumberFormatException e) {
+                    finalAmount += 0;
+                }
                 
                 // Video ID 컬럼이 발견된 경우, 특수문자로 시작하는 ID 처리
                 if (videoIdColumnIndex != -1 && videoIdColumnIndex < rowData.size()) {
@@ -477,6 +514,12 @@ public class ExcelSplitController {
         public void endSheet() {
             try {
                 System.out.println("시트 처리 완료. 총 " + allRows.size() + "개 데이터 행 수집됨.");
+
+                Map<String, String> map = new HashMap<>();
+                map.put("name", baseFilename);
+                map.put("finalAmount", String.format("%.0f", finalAmount));
+                finalAmounts.add(map);
+                finalAmount = 0;
                 
                 // 헤더에서 컬럼 인덱스 찾기
                 int finalSettlementIndex = -1;
