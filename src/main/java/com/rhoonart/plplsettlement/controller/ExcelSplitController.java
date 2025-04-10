@@ -25,6 +25,7 @@ import org.xml.sax.XMLReader;
 
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.*;
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -57,7 +58,7 @@ public class ExcelSplitController {
     // 최종 정산금 총 합계
     private static List<Map<String, String>> finalAmounts;
 
-    private static double finalAmount = 0;
+    private static BigDecimal finalAmount = new BigDecimal(0);
     private static double KRW = 0;
 
     @PostMapping("/split")
@@ -65,7 +66,9 @@ public class ExcelSplitController {
             @RequestParam("files") MultipartFile[] files,
             @RequestParam(value = "maxSizeMB", defaultValue = "29") int maxSizeMB) {
 
-        finalAmounts = new ArrayList<>();
+        List<Map<String, String>> finalAmountsCopy = new ArrayList<>();
+        finalAmounts = new ArrayList<>(finalAmountsCopy);
+
 
         // 요청 검증
         if (files == null || files.length == 0) {
@@ -97,16 +100,16 @@ public class ExcelSplitController {
                 String originalFilename = file.getOriginalFilename();
                 String baseFilename = originalFilename.substring(0, originalFilename.lastIndexOf("."));
 
-                // 임시 파일로 저장
-                Path tempFile = sessionPath.resolve("temp_" + originalFilename);
-                file.transferTo(tempFile.toFile());
-
+            // 임시 파일로 저장
+            Path tempFile = sessionPath.resolve("temp_" + originalFilename);
+            file.transferTo(tempFile.toFile());
+            
                 // 파일 변환
-                List<Map<String, Object>> resultFiles = processExcelFile(tempFile, sessionPath, baseFilename, maxSizeBytes);
+            List<Map<String, Object>> resultFiles = processExcelFile(tempFile, sessionPath, baseFilename, maxSizeBytes);
                 allResultFiles.addAll(resultFiles);
-                
-                // 임시 파일 삭제
-                Files.deleteIfExists(tempFile);
+            
+            // 임시 파일 삭제
+            Files.deleteIfExists(tempFile);
             }
             
             Map<String, Object> response = new HashMap<>();
@@ -115,8 +118,7 @@ public class ExcelSplitController {
             response.put("sessionId", sessionId);
             response.put("message", allResultFiles.size() + "개의 CSV 파일을 생성했습니다.");
             response.put("finalAmounts", finalAmounts);
-
-
+            
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
@@ -260,7 +262,7 @@ public class ExcelSplitController {
         }
     }
 
-    private List<Map<String, Object>> processExcelFile(Path excelFilePath, Path sessionPath, String baseFilename, long maxSizeBytes) 
+    private List<Map<String, Object>> processExcelFile(Path excelFilePath, Path sessionPath, String baseFilename, long maxFileSize) 
             throws IOException, OpenXML4JException, SAXException, ParserConfigurationException {
         
         List<Map<String, Object>> resultFiles = new ArrayList<>();
@@ -283,10 +285,10 @@ public class ExcelSplitController {
                     
                     // CSV 분할 파일을 처리할 핸들러 생성
                     CsvSplitSheetHandler handler = new CsvSplitSheetHandler(
-                            sessionPath, baseFilename, maxSizeBytes);
+                            sessionPath, baseFilename, maxFileSize);
 
 //                    CsvSplitSheetHandler handler = new CsvSplitSheetHandler(
-//                            sessionPath, baseFilename + "_" + sheetName, maxSizeBytes);
+//                            sessionPath, baseFilename + "_" + sheetName, maxFileSize);
                     
                     processSheet(styles, strings, handler, sheetStream);
                     
@@ -309,9 +311,79 @@ public class ExcelSplitController {
                              CsvSplitSheetHandler handler, InputStream sheetData) 
                              throws IOException, SAXException, ParserConfigurationException {
         
-        DataFormatter formatter = new DataFormatter();
-        InputSource sheetSource = new InputSource(sheetData);
+        // 원본 형식 그대로 유지하는 DataFormatter 생성 (정확한 숫자 표현을 위해)
+        DataFormatter formatter = new DataFormatter() {
+            @Override
+            public String formatRawCellContents(double value, int formatIndex, String formatString, boolean use1904Windowing) {
+                // 현재 처리 중인 컬럼의 인덱스 추출
+                if (handler.getCurrentRow() != null) {
+                    int colIndex = handler.getCurrentRow().size();
+                    
+                    // Partner Revenue 컬럼인 경우 13자리에서 반올림하여 14자리로 표시
+                    if (colIndex == handler.getPartnerRevenueIndex()) {
+                        // 소수점 13자리에서 반올림하여 14자리 표시
+                        BigDecimal bd = new BigDecimal(value);
+                        bd = bd.setScale(13, java.math.RoundingMode.HALF_UP);
+                        return bd.toPlainString() + "0";
+                    }
+                    // Partner Revenue (KRW) 또는 최종 정산금 컬럼인 경우 14자리까지 정확히 표시
+                    else if (colIndex == handler.getPartnerRevenueKrwIndex()) {
+                        return formatExactDecimal(value, 14);
+                    }
+                    // 최종 정산금 컬럼인 경우 15자리에서 반올림하여 14자리까지 표시
+                    else if (colIndex == handler.getFinalSettlementIndex()) {
+                        // 15자리에서 반올림하여 14자리 표시
+                        BigDecimal bd = new BigDecimal(value);
+                        bd = bd.setScale(14, java.math.RoundingMode.HALF_UP);
+                        return bd.toPlainString();
+                    }
+                    // 정산요율 또는 실연권요율 컬럼인 경우 백분위(%)로 표시
+                    else if (colIndex == handler.getSettlementRateIndex() || colIndex == handler.getPerformanceRightsRateIndex()) {
+                        // 요율을 백분위(%)로 표시
+                        BigDecimal bd = new BigDecimal(value);
+                        // 소수점 4자리까지 유지하고 백분율로 변환 (100 곱하기)
+                        bd = bd.multiply(new BigDecimal(100)).setScale(4, java.math.RoundingMode.HALF_UP);
+                        // 소수점 뒤가 0인 경우 정수로 표시
+                        String result = bd.stripTrailingZeros().toPlainString();
+                        if (result.endsWith(".0")) {
+                            result = result.substring(0, result.length() - 2);
+                        }
+                        return result + "%";
+                    }
+                }
+                
+                // 그 외의 작은 소수 값은 정밀하게 표현
+                if (Math.abs(value) < 1.0 && value != 0) {
+                    return formatExactDecimal(value, 14);
+                }
+                
+                return super.formatRawCellContents(value, formatIndex, formatString, use1904Windowing);
+            }
+            
+            // 소수점 자리수를 정확하게 표현하는 메서드
+            private String formatExactDecimal(double value, int precision) {
+                StringBuilder sb = new StringBuilder();
+                
+                // 소수점 앞 부분
+                long intPart = (long) Math.abs(value);
+                if (value < 0) sb.append('-');
+                sb.append(intPart);
+                sb.append('.');
+                
+                // 소수점 뒷 부분 (정확한 자리수 유지)
+                double fracPart = Math.abs(value) - intPart;
+                for (int i = 0; i < precision; i++) {
+                    fracPart *= 10;
+                    int digit = (int) fracPart;
+                    sb.append(digit);
+                    fracPart -= digit;
+                }
+                
+                return sb.toString();
+            }
+        };
         
+        InputSource sheetSource = new InputSource(sheetData);
         XMLReader sheetParser = XMLHelper.newXMLReader();
         
         // 메모리 사용량을 줄이기 위한 SAX 파서 설정
@@ -330,8 +402,8 @@ public class ExcelSplitController {
                 styles, strings, handler, formatter, false);
         sheetParser.setContentHandler(contentHandler);
         
-        // 시트 처리 시작 - 행을 모두 수집한 후 마지막 행을 제외하고 CSV 생성
-        System.out.println("시트 처리 시작 - 모든 행을 수집 후 마지막 행만 제외하는 방식으로 진행");
+        // 시트 처리 시작 
+        System.out.println("시트 처리 시작 - 정밀한 소수점 표현 설정으로 진행");
         sheetParser.parse(sheetSource);
     }
 
@@ -366,6 +438,11 @@ public class ExcelSplitController {
         
         // Video ID 컬럼 인덱스 저장
         private int videoIdColumnIndex = -1;
+        private int partnerRevenueIndex = -1;
+        private int partnerRevenueKrwIndex = -1;
+        private int finalSettlementIndex = -1;
+        private int settlementRateIndex = -1; // 정산요율 컬럼 인덱스
+        private int performanceRightsRateIndex = -1; // 실연권요율 컬럼 인덱스
         
         public CsvSplitSheetHandler(Path outputPath, String baseFilename, long maxFileSize) {
             this.outputPath = outputPath;
@@ -403,13 +480,7 @@ public class ExcelSplitController {
                 formattedValue = "";
             }
             
-            // Video ID 컬럼 인덱스 확인 (첫 행에서만)
-            if (currentRowNum == 0 && formattedValue.contains("Video ID")) {
-                videoIdColumnIndex = currentRow.size();
-                System.out.println("Video ID 컬럼 발견: 인덱스 " + videoIdColumnIndex);
-            }
-            
-            // 셀 레퍼런스에서 컬럼 인덱스 추출
+            // 컬럼 인덱스 파악
             CellReference ref = new CellReference(cellReference);
             int thisCol = ref.getCol();
             
@@ -417,15 +488,112 @@ public class ExcelSplitController {
             while (currentRow.size() < thisCol) {
                 currentRow.add("");
             }
+
+            // 첫 행(헤더)에서 특수 컬럼 인덱스 식별
+            if (currentRowNum == 0) {
+                if (formattedValue.contains("Video ID")) {
+                    videoIdColumnIndex = thisCol;
+                    System.out.println("Video ID 컬럼 발견: 인덱스 " + videoIdColumnIndex);
+                } else if (formattedValue.equals("Partner Revenue")) {
+                    partnerRevenueIndex = thisCol;
+                    System.out.println("Partner Revenue 컬럼 발견: 인덱스 " + partnerRevenueIndex);
+                } else if (formattedValue.equals("Partner Revenue (KRW)")) {
+                    partnerRevenueKrwIndex = thisCol;
+                    System.out.println("Partner Revenue (KRW) 컬럼 발견: 인덱스 " + partnerRevenueKrwIndex);
+                } else if (formattedValue.contains("최종 정산금")) {
+                    finalSettlementIndex = thisCol;
+                    System.out.println("최종 정산금 컬럼 발견: 인덱스 " + finalSettlementIndex);
+                } else if (formattedValue.contains("정산요율")) {
+                    settlementRateIndex = thisCol;
+                    System.out.println("정산요율 컬럼 발견: 인덱스 " + settlementRateIndex);
+                } else if (formattedValue.contains("실연권요율")) {
+                    performanceRightsRateIndex = thisCol;
+                    System.out.println("실연권요율 컬럼 발견: 인덱스 " + performanceRightsRateIndex);
+                }
+            }
+            
+            // Partner Revenue 컬럼 특수 처리 - 13자리에서 반올림하여 14자리로 표시
+            if (currentRowNum > 0 && thisCol == partnerRevenueIndex && !formattedValue.isEmpty()) {
+                try {
+                    // Partner Revenue 값 처리 (소수점 13자리에서 반올림)
+                    String cleanValue = formattedValue.replace(",", "").trim();
+                    
+                    // 값이 숫자인지 확인
+                    if (cleanValue.matches("-?[\\d.]+")) {
+                        // BigDecimal로 변환하여 정확히 13자리에서 반올림
+                        BigDecimal bd = new BigDecimal(cleanValue);
+                        bd = bd.setScale(13, java.math.RoundingMode.HALF_UP);
+                        
+                        // 14자리로 표시하기 위해 0 추가
+                        formattedValue = bd.toPlainString() + "0";
+                        System.out.println("Partner Revenue 반올림 처리: " + cleanValue + " -> " + formattedValue);
+                    }
+                } catch (Exception e) {
+                    System.out.println("Partner Revenue 값 처리 중 오류: " + e.getMessage());
+                }
+            }
+            // Partner Revenue (KRW) 컬럼 특수 처리 - 소수점 14자리까지 정확히 표시
+            else if (currentRowNum > 0 && thisCol == partnerRevenueKrwIndex && !formattedValue.isEmpty()) {
+                try {
+                    String cleanValue = formattedValue.replace(",", "").trim();
+                    
+                    // 값이 숫자인지 확인
+                    if (cleanValue.matches("-?[\\d.]+")) {
+                        // 소수점 포함 여부 확인
+                        if (cleanValue.contains(".")) {
+                            String[] parts = cleanValue.split("\\.");
+                            String integerPart = parts[0];
+                            String decimalPart = parts[1];
+                            
+                            // 소수점 이하 자릿수가 14자리가 되도록 처리
+                            if (decimalPart.length() < 14) {
+                                // 0으로 채우기
+                                StringBuilder paddedDecimal = new StringBuilder(decimalPart);
+                                while (paddedDecimal.length() < 14) {
+                                    paddedDecimal.append("0");
+                                }
+                                formattedValue = integerPart + "." + paddedDecimal;
+                            }
+                        } else {
+                            // 소수점이 없는 경우 소수점 14자리 추가
+                            formattedValue = cleanValue + ".00000000000000";
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Partner Revenue (KRW) 값 처리 중 오류: " + e.getMessage());
+                }
+            }
+            // 최종 정산금 컬럼 특수 처리 - 소수점 15자리에서 반올림하여 14자리로 표시
+            else if (currentRowNum > 0 && thisCol == finalSettlementIndex && !formattedValue.isEmpty()) {
+                try {
+                    String cleanValue = formattedValue.replace(",", "").trim();
+                    
+                    // 값이 숫자인지 확인
+                    if (cleanValue.matches("-?[\\d.]+")) {
+                        // BigDecimal로 변환하여 정확히 15자리에서 반올림
+                        BigDecimal bd = new BigDecimal(cleanValue);
+                        bd = bd.setScale(14, java.math.RoundingMode.HALF_UP);
+                        formattedValue = bd.toPlainString();
+                        System.out.println("최종 정산금 반올림 처리: " + cleanValue + " -> " + formattedValue);
+                    }
+                } catch (Exception e) {
+                    System.out.println("최종 정산금 값 처리 중 오류: " + e.getMessage());
+                }
+            }
+            
+            // Video ID 특별 처리
+            if (thisCol == videoIdColumnIndex && currentRowNum > 0) {
+                if (formattedValue.startsWith("=") || formattedValue.startsWith("+") || 
+                    formattedValue.startsWith("-") || formattedValue.startsWith("@")) {
+                    if (!formattedValue.startsWith("'")) {
+                        formattedValue = "'" + formattedValue;
+                    }
+                }
+            }
             
             // CSV 용으로 포맷팅
-            formattedValue = escapeCsvValue(formattedValue, currentRow.size() == videoIdColumnIndex);
+            formattedValue = escapeCsvValue(formattedValue, thisCol == videoIdColumnIndex);
             currentRow.add(formattedValue);
-        }
-        
-        @Override
-        public void headerFooter(String text, boolean isHeader, String tagName) {
-            // 사용하지 않음
         }
         
         @Override
@@ -457,33 +625,6 @@ public class ExcelSplitController {
                 // 데이터 행 처리
                 List<String> rowData = new ArrayList<>(currentRow);
 
-                // KRW 합계 계산
-                double ad;
-                try {
-                    Double ab = Double.parseDouble(rowData.get(rowData.size() - 6));
-                    Double ac = Double.parseDouble(rowData.get(rowData.size() - 5));
-                    ad = ab*ac;
-                    rowData.set(rowData.size() - 4, Double.toString(ad));
-                    KRW += ad;
-                }
-                catch (NumberFormatException e) {
-                    KRW += 0;
-                    ad = 0;
-                }
-
-                // 최종 정산금 합계 계산
-                try {
-                    double ae = Double.parseDouble(rowData.get(rowData.size() - 3).replace("%", "")) / 100;
-                    double af = Double.parseDouble(rowData.get(rowData.size() - 2).replace("%", "")) / 100;
-
-                    double ag = (ad * ae) - ((ad * ae) * af);
-                    rowData.set(rowData.size() - 1, Double.toString(ag));
-                    finalAmount += ag;
-                }
-                catch (NumberFormatException e) {
-                    finalAmount += 0;
-                }
-                
                 // Video ID 컬럼이 발견된 경우, 특수문자로 시작하는 ID 처리
                 if (videoIdColumnIndex != -1 && videoIdColumnIndex < rowData.size()) {
                     String videoId = rowData.get(videoIdColumnIndex);
@@ -495,6 +636,78 @@ public class ExcelSplitController {
                                 videoId = "'" + videoId;
                                 rowData.set(videoIdColumnIndex, videoId);
                             }
+                        }
+                    }
+                }
+                
+                // 최종 정산금 컬럼 확인 및 최종 금액 합산
+                if (finalSettlementIndex != -1 && finalSettlementIndex < rowData.size()) {
+                    String value = rowData.get(finalSettlementIndex).replace("\"", "");
+                    
+                    if (value != null && !value.isEmpty()) {
+                        try {
+                            // 쉼표 제거 및 숫자 변환
+                            String cleanValue = value.replace(",", "").trim();
+                            
+                            // 값이 숫자인지 확인
+                            if (cleanValue.matches("-?[\\d.]+")) {
+                                // 최종 정산금 합산
+                                BigDecimal rowAmount = new BigDecimal(cleanValue);
+                                finalAmount = finalAmount.add(rowAmount);
+                                System.out.println("최종 정산금 합산: " + rowAmount + ", 총합: " + finalAmount);
+                            }
+                        } catch (Exception e) {
+                            System.out.println("최종 정산금 합산 중 오류: " + e.getMessage());
+                        }
+                    }
+                }
+                
+                // 정산요율 컬럼 백분위 처리
+                if (settlementRateIndex != -1 && settlementRateIndex < rowData.size()) {
+                    String value = rowData.get(settlementRateIndex).replace("\"", "");
+                    if (value != null && !value.isEmpty()) {
+                        try {
+                            // 값이 숫자인지 확인
+                            if (value.matches("-?[\\d.]+")) {
+                                // 백분율로 변환 (100 곱하기)
+                                BigDecimal rate = new BigDecimal(value);
+                                rate = rate.multiply(new BigDecimal(100)).setScale(4, java.math.RoundingMode.HALF_UP);
+                                // 소수점 뒤가 0인 경우 정수로 표시
+                                String formattedRate = rate.stripTrailingZeros().toPlainString();
+                                if (formattedRate.endsWith(".0")) {
+                                    formattedRate = formattedRate.substring(0, formattedRate.length() - 2);
+                                }
+                                formattedRate = formattedRate + "%";
+                                rowData.set(settlementRateIndex, formattedRate);
+                                System.out.println("정산요율 백분위 변환: " + value + " -> " + formattedRate);
+                            }
+                        } catch (Exception e) {
+                            System.out.println("정산요율 백분위 변환 중 오류: " + e.getMessage());
+                        }
+                    }
+                }
+                
+                // 실연권요율 컬럼 백분위 처리
+                if (performanceRightsRateIndex != -1 && performanceRightsRateIndex < rowData.size()) {
+                    String value = rowData.get(performanceRightsRateIndex).replace("\"", "");
+                    if (value != null && !value.isEmpty()) {
+                        try {
+                            // 값이 숫자인지 확인
+                            if (value.matches("-?[\\d.]+")) {
+                                // 백분율로 변환 (100 곱하기)
+                                BigDecimal rate = new BigDecimal(value);
+                                rate = rate.multiply(new BigDecimal(100)).setScale(4, java.math.RoundingMode.HALF_UP);
+                                // 소수점 뒤가 0인 경우 정수로 표시
+                                String formattedRate = rate.stripTrailingZeros().toPlainString();
+                                if (formattedRate.endsWith(".0")) {
+                                    formattedRate = formattedRate.substring(0, formattedRate.length() - 2);
+                                }
+                                formattedRate = formattedRate + "%";
+                                rowData.set(performanceRightsRateIndex, formattedRate);
+                                System.out.println("실연권요율 백분위 변환: " + value + " -> " + formattedRate);
+                            }
+                        } catch (Exception e) {
+                            System.out.println("실연권요율 백분위 변환 중 오류: " + e.getMessage());
                         }
                     }
                 }
@@ -511,35 +724,109 @@ public class ExcelSplitController {
         }
         
         @Override
+        public void headerFooter(String text, boolean isHeader, String tagName) {
+            // 사용하지 않음
+        }
+        
+        @Override
         public void endSheet() {
             try {
                 System.out.println("시트 처리 완료. 총 " + allRows.size() + "개 데이터 행 수집됨.");
 
                 Map<String, String> map = new HashMap<>();
                 map.put("name", baseFilename);
-                map.put("finalAmount", String.format("%.0f", finalAmount));
+                map.put("finalAmount", finalAmount.toPlainString());
                 finalAmounts.add(map);
-                finalAmount = 0;
+                finalAmount = new BigDecimal(0);
                 
-                // 헤더에서 컬럼 인덱스 찾기
-                int finalSettlementIndex = -1;
-                int partnerRevenueIndex = -1;
-                
-                for (int i = 0; i < headers.size(); i++) {
-                    String header = headers.get(i);
-                    if (header.contains("최종 정산금")) {
-                        finalSettlementIndex = i;
-                    } else if (header.contains("Partner Revenue (KRW)")) {
-                        partnerRevenueIndex = i;
-                    }
-                }
-                
-                // 모든 행의 최종 정산금 컬럼 값 처리
+                // 모든 행에서 Partner Revenue 값 최종 확인
+                System.out.println("Partner Revenue 컬럼 인덱스: " + partnerRevenueIndex);
                 for (List<String> row : allRows) {
+                    // Partner Revenue 컬럼 확인 및 수정 - 13자리에서 반올림하여 14자리로 표시
+                    if (partnerRevenueIndex != -1 && partnerRevenueIndex < row.size()) {
+                        // 값 추출 및 처리
+                        String value = row.get(partnerRevenueIndex).replace("\"", "");
+                        
+                        if (value != null && !value.isEmpty()) {
+                            try {
+                                // 쉼표 제거 및 숫자 변환
+                                String cleanValue = value.replace(",", "").trim();
+                                
+                                // 소수점 자리 처리 - 13자리에서 반올림
+                                if (cleanValue.matches("-?[\\d.]+")) {
+                                    // BigDecimal로 변환하여 정확히 13자리에서 반올림
+                                    BigDecimal bd = new BigDecimal(cleanValue);
+                                    bd = bd.setScale(13, java.math.RoundingMode.HALF_UP);
+                                    
+                                    // 14자리로 표시하기 위해 0 추가
+                                    String processedValue = bd.toPlainString() + "0";
+                                    row.set(partnerRevenueIndex, processedValue);
+                                    System.out.println("Partner Revenue 최종 확인(반올림): " + cleanValue + " -> " + processedValue);
+                                }
+                            } catch (Exception e) {
+                                System.out.println("Partner Revenue 최종 확인 중 오류: " + e.getMessage());
+                            }
+                        }
+                    }
+                    
+                    // Partner Revenue (KRW) 컬럼 확인 및 수정 - 소수점 14자리까지 정확히 표시
+                    if (partnerRevenueKrwIndex != -1 && partnerRevenueKrwIndex < row.size()) {
+                        String value = row.get(partnerRevenueKrwIndex).replace("\"", "");
+                        
+                        if (value != null && !value.isEmpty()) {
+                            try {
+                                // 쉼표 제거 및 숫자 변환
+                                String cleanValue = value.replace(",", "").trim();
+                                
+                                // 소수점 자리 처리 - 14자리까지 표시
+                                if (cleanValue.matches("-?[\\d.]+")) {
+                                    if (cleanValue.contains(".")) {
+                                        String[] parts = cleanValue.split("\\.");
+                                        String integerPart = parts[0];
+                                        String decimalPart = parts[1];
+                                        
+                                        // 소수점 이하 자릿수가 14자리가 되도록 처리
+                                        if (decimalPart.length() < 14) {
+                                            StringBuilder paddedDecimal = new StringBuilder(decimalPart);
+                                            while (paddedDecimal.length() < 14) {
+                                                paddedDecimal.append("0");
+                                            }
+                                            String processedValue = integerPart + "." + paddedDecimal.toString();
+                                            row.set(partnerRevenueKrwIndex, processedValue);
+                                        }
+                                    } else {
+                                        // 소수점이 없는 경우 소수점 14자리 추가
+                                        String processedValue = cleanValue + ".00000000000000";
+                                        row.set(partnerRevenueKrwIndex, processedValue);
+                                    }
+                                }
+                            } catch (Exception e) {
+                                System.out.println("Partner Revenue (KRW) 최종 확인 중 오류: " + e.getMessage());
+                            }
+                        }
+                    }
+                    
+                    // 최종 정산금 컬럼 확인 및 수정 - 소수점 15자리에서 반올림하여 14자리로 표시
                     if (finalSettlementIndex != -1 && finalSettlementIndex < row.size()) {
-                        String value = row.get(finalSettlementIndex);
-                        if (value != null && !value.isEmpty() && !value.matches("^[0-9.,]+$")) {
-                            row.set(finalSettlementIndex, "0");
+                        String value = row.get(finalSettlementIndex).replace("\"", "");
+                        
+                        if (value != null && !value.isEmpty()) {
+                            try {
+                                // 쉼표 제거 및 숫자 변환
+                                String cleanValue = value.replace(",", "").trim();
+                                
+                                // 소수점 자리 처리 - 15자리에서 반올림하여 14자리로 표시
+                                if (cleanValue.matches("-?[\\d.]+")) {
+                                    // BigDecimal로 변환하여 정확히 15자리에서 반올림
+                                    BigDecimal bd = new BigDecimal(cleanValue);
+                                    bd = bd.setScale(14, java.math.RoundingMode.HALF_UP);
+                                    String processedValue = bd.toPlainString();
+                                    row.set(finalSettlementIndex, processedValue);
+                                    //System.out.println("최종 정산금 반올림 처리: " + cleanValue + " -> " + processedValue);
+                                }
+                            } catch (Exception e) {
+                                System.out.println("최종 정산금 최종 확인 중 오류: " + e.getMessage());
+                            }
                         }
                     }
                 }
@@ -558,10 +845,10 @@ public class ExcelSplitController {
                     }
                     
                     // 최종 정산금과 Partner Revenue (KRW) 컬럼만 값이 있는 경우 제외
-                    if (finalSettlementIndex != -1 && partnerRevenueIndex != -1) {
+                    if (finalSettlementIndex != -1 && partnerRevenueKrwIndex != -1) {
                         boolean onlySettlementValues = true;
                         for (int i = 0; i < lastRow.size(); i++) {
-                            if (i != finalSettlementIndex && i != partnerRevenueIndex && 
+                            if (i != finalSettlementIndex && i != partnerRevenueKrwIndex && 
                                 lastRow.get(i) != null && !lastRow.get(i).isEmpty()) {
                                 onlySettlementValues = false;
                                 break;
@@ -589,7 +876,22 @@ public class ExcelSplitController {
                 
                 // 데이터 행 쓰기
                 for (List<String> rowData : allRows) {
-                    String line = String.join(",", rowData);
+                    // 각 행의 모든 셀을 정확하게 CSV 형식으로 변환
+                    List<String> escapedCells = new ArrayList<>(rowData.size());
+                    
+                    for (int i = 0; i < rowData.size(); i++) {
+                        String cell = rowData.get(i);
+                        
+                        // Partner Revenue는 이미 이전 단계에서 정확하게 처리되었음
+                        boolean isVideoIdCol = (i == videoIdColumnIndex);
+                        
+                        // CSV로 escaping
+                        String escapedCell = escapeCsvValue(cell, isVideoIdCol);
+                        escapedCells.add(escapedCell);
+                    }
+                    
+                    // 이스케이프된 셀들을 합쳐 하나의 CSV 라인으로 만들기
+                    String line = String.join(",", escapedCells);
                     byte[] lineBytes = (line + "\n").getBytes(StandardCharsets.UTF_8);
                     
                     // 파일 크기 제한을 초과하면 새 파일 생성
@@ -629,29 +931,25 @@ public class ExcelSplitController {
         }
         
         private String escapeCsvValue(String value, boolean isVideoId) {
-            if (value == null) {
+            if (value == null || value.isEmpty()) {
                 return "";
             }
             
-            // Video ID 컬럼인 경우 특수 처리
-            if (isVideoId && value.length() > 0) {
-                // =, +, - 등으로 시작하는 값이 수식으로 처리되지 않도록 보호
-                if (value.startsWith("=") || value.startsWith("+") || value.startsWith("-") || 
-                    value.startsWith("@") || value.startsWith("'")) {
-                    
-                    // 앞에 있는 작은따옴표 제거 (이미 추가된 경우)
-                    if (value.startsWith("'")) {
-                        value = value.substring(1);
+            // Video ID 특수 처리
+            if (isVideoId) {
+                if (value.startsWith("=") || value.startsWith("+") || value.startsWith("-") || value.startsWith("@")) {
+                    // 앞에 작은따옴표(')를 추가하여 수식으로 해석되지 않도록 함
+                    if (!value.startsWith("'")) {
+                        value = "'" + value;
                     }
-                    
-                    // 쌍따옴표로 감싸고 내부 쌍따옴표는 이스케이프
-                    return "\"'" + value.replace("\"", "\"\"") + "\"";
                 }
             }
             
-            // 쌍따옴표나 쉼표가 포함된 경우 쌍따옴표로 감싸기
-            if (value.contains("\"") || value.contains(",") || value.contains("\n")) {
-                // 내부의 쌍따옴표는 두 번 반복하여 이스케이프
+            // 값에 쉼표, 큰따옴표 또는 개행이 포함되어 있으면 큰따옴표로 감싸기
+            boolean needsQuotes = value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r");
+            
+            if (needsQuotes) {
+                // 큰따옴표를 두 개로 이스케이프
                 value = value.replace("\"", "\"\"");
                 return "\"" + value + "\"";
             }
@@ -661,6 +959,36 @@ public class ExcelSplitController {
         
         public Map<String, Long> getCreatedFiles() {
             return createdFiles;
+        }
+        
+        // 현재 처리 중인 행 가져오기
+        public List<String> getCurrentRow() {
+            return currentRow;
+        }
+        
+        // Partner Revenue 컬럼 인덱스 가져오기
+        public int getPartnerRevenueIndex() {
+            return partnerRevenueIndex;
+        }
+        
+        // Partner Revenue (KRW) 컬럼 인덱스 가져오기
+        public int getPartnerRevenueKrwIndex() {
+            return partnerRevenueKrwIndex;
+        }
+        
+        // 최종 정산금 컬럼 인덱스 가져오기
+        public int getFinalSettlementIndex() {
+            return finalSettlementIndex;
+        }
+        
+        // 정산요율 컬럼 인덱스 가져오기
+        public int getSettlementRateIndex() {
+            return settlementRateIndex;
+        }
+        
+        // 실연권요율 컬럼 인덱스 가져오기
+        public int getPerformanceRightsRateIndex() {
+            return performanceRightsRateIndex;
         }
         
         // 새 파일을 생성하는 메서드 추가

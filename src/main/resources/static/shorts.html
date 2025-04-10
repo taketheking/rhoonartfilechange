@@ -675,24 +675,33 @@
                   let totalFinalAmount = 0;
                   const finalAmounts = document.getElementById("finalAmounts");
                   const finalAmountList = document.getElementById('finalAmountList');
-
+                  
+                  // 목록 초기화
+                  finalAmountList.innerHTML = "";
+                  
                   response.finalAmounts.forEach(item => {
                     totalFinalAmount += Number(item.finalAmount);
-
-                    // 각 Map<String, Double> 요소를 순회하면서 li 생성
                     const li = document.createElement('li');
+                    
+                    // 파일명 보기 좋게 정리
+                    const nameSpan = document.createElement('span');
+                    nameSpan.style.fontWeight = 'bold';
+                    nameSpan.innerText = `${item.name}: `;
+                    
+                    // 금액 소수점 6자리까지만 표시 (반올림 없음)
                     const contentSpan = document.createElement('span');
-
-                    li.textContent = `${item.name}의 합계 =  `;
-                    contentSpan.innerText = `${Number(item.finalAmount).toLocaleString()} \n`;
-
+                    const amount = Number(item.finalAmount);
+                    const formattedAmount = amount.toString().split('.')[0] + '.' + (amount.toString().split('.')[1] || '').padEnd(6, '0').slice(0, 6);
+                    contentSpan.innerText = `${formattedAmount} \n`;
+                    
+                    li.appendChild(nameSpan);
                     li.appendChild(contentSpan);
                     finalAmountList.appendChild(li);
-                  })
-
-                  finalAmounts.innerText = totalFinalAmount.toLocaleString();
-
-
+                  });
+                  
+                  // 총 합계도 소수점 6자리까지만 표시 (반올림 없음)
+                  const formattedTotal = totalFinalAmount.toString().split('.')[0] + '.' + (totalFinalAmount.toString().split('.')[1] || '').padEnd(6, '0').slice(0, 6);
+                  finalAmounts.innerText = formattedTotal;
 
                   // 세션 ID 저장
                   const sessionId = response.sessionId;

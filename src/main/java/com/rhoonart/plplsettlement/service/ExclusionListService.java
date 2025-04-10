@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ExclusionListService {
-    private static final String STORAGE_DIR = "data";
+    private static final String STORAGE_DIR = "exclusion_list";
     private final ConcurrentHashMap<String, List<String>> exclusionLists = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path storagePath;
