@@ -483,6 +483,34 @@
       tr:last-child td:last-child {
         border-bottom-right-radius: 8px;
       }
+
+      /* 정산금액 합계 섹션 스타일 */
+      .summary-section {
+        display: flex;
+        gap: 20px;
+        margin: 20px 0;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .summary-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .summary-label {
+        font-size: 14px;
+        color: #666;
+      }
+
+      .summary-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+      }
     </style>
   </head>
   <body>
@@ -494,7 +522,8 @@
         <ul class="menu-items">
           <li class="menu-item"><a href="/melon.html">멜론</a></li>
           <li class="menu-item"><a href="/genie.html">지니</a></li>
-          <li class="menu-item"><a href="/vibe.html">바이브</a></li>
+          <li class="menu-item"><a href="/vibe.html">바이브_수호_GRP</a></li>
+          <li class="menu-item"><a href="/vibe2.html">바이브_루나르트</a></li>
           <li class="menu-item active"><a href="/flo.html">플로</a></li>
         </ul>
       </div>
@@ -573,9 +602,11 @@
             <option value="all">전체</option>
             <option value="songName">곡명</option>
             <option value="albumName">앨범명</option>
-            <option value="artistName">가수명</option>
-            <option value="companyName">회사명</option>
-            <option value="agencyName">기획사명</option>
+            <option value="artistName">아티스트명</option>
+            <option value="trackCode">곡코드</option>
+            <option value="companyTrackCode">업체곡코드</option>
+            <option value="albumCode">앨범코드</option>
+            <option value="companyAlbumCode">업체앨범코드</option>
           </select>
           <input
             type="text"
@@ -583,6 +614,16 @@
             class="search-input"
             placeholder="검색어를 입력하세요"
           />
+        </div>
+        <div class="summary-section">
+          <div class="summary-item">
+            <span class="summary-label">전체 정산금액 합계:</span>
+            <span class="summary-value" id="totalSettlementSum">0원</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">제외 후 정산금액 합계:</span>
+            <span class="summary-value" id="filteredSettlementSum">0원</span>
+          </div>
         </div>
         <div class="table-container">
           <table>
@@ -750,12 +791,32 @@
       }
 
       function processData(data) {
-        // 데이터 처리
-        // 제외 리스트 필터링 적용
-        filteredData = applyExclusionFilter(data);
-        return data;
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
+        const processedData = data.map((row) => {
+          return {
+            ...row,
+            settlementMonth: `${currentYear}${String(currentMonth).padStart(
+              2,
+              "0"
+            )}`,
+            saleMonth: `${currentYear}${String(currentMonth - 2).padStart(
+              2,
+              "0"
+            )}`,
+          };
+        });
+
+        filteredData = applyExclusionFilter(processedData);
+        
+        // 정산금액 합계 업데이트
+        updateSettlementSums(processedData, filteredData);
+        
+        return processedData;
       }
-      
+
       // 제외 리스트를 적용하여 데이터 필터링하는 함수
       function applyExclusionFilter(data) {
         // 콘솔에 전체 리스트 대신 길이와 샘플만 출력
@@ -801,6 +862,25 @@
         
         console.log(`필터링 결과: 원본 ${data.length}개, 필터링 후 ${filteredData.length}개`);
         return filteredData;
+      }
+
+      // 정산금액 합계 계산 및 표시 함수
+      function updateSettlementSums(allData, filteredData) {
+        // 전체 정산금액 합계 계산
+        const totalSum = allData.reduce((sum, row) => {
+          return sum + (parseFloat(row.settlementAmount) || 0);
+        }, 0);
+
+        // 필터링된 정산금액 합계 계산
+        const filteredSum = filteredData.reduce((sum, row) => {
+          return sum + (parseFloat(row.settlementAmount) || 0);
+        }, 0);
+
+        // 합계 표시 업데이트
+        document.getElementById('totalSettlementSum').textContent = 
+          totalSum.toLocaleString() + '원';
+        document.getElementById('filteredSettlementSum').textContent = 
+          filteredSum.toLocaleString() + '원';
       }
 
       function displayData() {
@@ -1442,6 +1522,9 @@
               .includes(searchTerm);
           }
         });
+
+        // 정산금액 합계 업데이트
+        updateSettlementSums(currentData, filteredData);
 
         currentPage = 1;
         displayData();
