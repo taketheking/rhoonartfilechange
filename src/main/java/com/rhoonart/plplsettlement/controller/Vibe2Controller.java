@@ -192,23 +192,42 @@ public class Vibe2Controller {
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
             
+            // 헤더 행 가져오기
+            Row headerRow = sheet.getRow(0);
+            Map<String, Integer> columnIndexMap = new HashMap<>();
+            
+            // 컬럼 인덱스 매핑
+            for (Cell cell : headerRow) {
+                String headerName = cell.getStringCellValue().trim();
+                columnIndexMap.put(headerName, cell.getColumnIndex());
+            }
+            
+            // 트랙코드(수정후)와 음반코드 컬럼의 인덱스 찾기
+            Integer trackCodeIndex = columnIndexMap.get("트랙코드(수정후)");
+            Integer albumCodeIndex = columnIndexMap.get("음반코드");
+            
+            if (trackCodeIndex == null || albumCodeIndex == null) {
+                throw new IllegalArgumentException("필수 컬럼(트랙코드(수정후), 음반코드)이 없습니다.");
+            }
+            
+            // 데이터 행 처리
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
                 
-                // 첫 번째 열은 트랙 코드
-                Cell trackCell = row.getCell(0);
+                // 트랙코드(수정후) 처리
+                Cell trackCell = row.getCell(trackCodeIndex);
                 if (trackCell != null) {
-                    String trackCode = trackCell.getStringCellValue().trim();
+                    String trackCode = getCellValueAsString(trackCell).trim();
                     if (!trackCode.isEmpty()) {
                         trackCodes.add(trackCode);
                     }
                 }
                 
-                // 두 번째 열은 앨범 코드
-                Cell albumCell = row.getCell(1);
+                // 음반코드 처리
+                Cell albumCell = row.getCell(albumCodeIndex);
                 if (albumCell != null) {
-                    String albumCode = albumCell.getStringCellValue().trim();
+                    String albumCode = getCellValueAsString(albumCell).trim();
                     if (!albumCode.isEmpty()) {
                         albumCodes.add(albumCode);
                     }
@@ -220,5 +239,31 @@ public class Vibe2Controller {
         exclusionList.put("albumCodes", albumCodes);
         
         return ResponseEntity.ok(exclusionList);
+    }
+    
+    private String getCellValueAsString(Cell cell) {
+        if (cell == null) {
+            return "";
+        }
+        
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    return cell.getDateCellValue().toString();
+                } else {
+                    double numValue = cell.getNumericCellValue();
+                    if (numValue == Math.floor(numValue)) {
+                        return String.valueOf((long) numValue);
+                    } else {
+                        return String.valueOf(numValue);
+                    }
+                }
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            default:
+                return "";
+        }
     }
 } 

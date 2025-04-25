@@ -686,6 +686,10 @@
             <span class="summary-label">제외 후 저작인접권료 합계:</span>
             <span class="summary-value" id="filteredCopyrightSum">0원</span>
           </div>
+          <div class="summary-item">
+            <span class="summary-label">제외된 항목 저작인접권료 합계:</span>
+            <span class="summary-value" id="excludedCopyrightSum">0원</span>
+          </div>
         </div>
         <div class="table-container">
           <table>
@@ -890,11 +894,16 @@
           return sum + (parseFloat(row.copyright) || 0);
         }, 0);
 
+        // 제외된 항목의 저작인접권료 합계 계산
+        const excludedSum = totalSum - filteredSum;
+
         // 합계 표시 업데이트
         document.getElementById('totalCopyrightSum').textContent = 
           totalSum.toLocaleString() + '원';
         document.getElementById('filteredCopyrightSum').textContent = 
           filteredSum.toLocaleString() + '원';
+        document.getElementById('excludedCopyrightSum').textContent = 
+          excludedSum.toLocaleString() + '원';
       }
 
       // 제외 리스트 파일 업로드 처리

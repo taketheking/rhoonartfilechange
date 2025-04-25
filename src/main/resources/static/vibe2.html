@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>루나르트 정산 시스템 - 바이브2</title>
+    <title>루나르트 정산 시스템 - 바이브_루나르트</title>
     <link rel="stylesheet" href="/css/styles.css" />
     <style>
       /* 공통 스타일 */
@@ -537,7 +537,7 @@
 
     <div class="main-content">
       <div class="container">
-        <h1 class="title">바이브2 정산 데이터</h1>
+        <h1 class="title">바이브_루나르트 정산 데이터</h1>
         <div class="action-buttons">
           <input
             type="file"
@@ -619,6 +619,10 @@
           <div class="summary-item">
             <span class="summary-label">제외 후 인접권료 합계:</span>
             <span class="summary-value" id="filteredAdjacentRightsSum">0원</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">제외된 항목 인접권료 합계:</span>
+            <span class="summary-value" id="excludedAdjacentRightsSum">0원</span>
           </div>
         </div>
         <div class="table-container">
@@ -860,11 +864,16 @@
           return sum + (parseFloat(row.adjacentRights) || 0);
         }, 0);
 
+        // 제외된 항목의 인접권료 합계 계산
+        const excludedSum = totalSum - filteredSum;
+
         // 합계 표시 업데이트
         document.getElementById('totalAdjacentRightsSum').textContent = 
           totalSum.toLocaleString() + '원';
         document.getElementById('filteredAdjacentRightsSum').textContent = 
           filteredSum.toLocaleString() + '원';
+        document.getElementById('excludedAdjacentRightsSum').textContent = 
+          excludedSum.toLocaleString() + '원';
       }
 
       // 검색 기능
@@ -1039,7 +1048,7 @@
 
       function exportToCSV() {
         const BOM = "\uFEFF";
-        const pageType = "vibe2";
+        const pageType = "vibe";
 
         // 데이터에서 정산월 추출 (첫 번째 행의 정산월 사용)
         let settlementMonth = "000000";

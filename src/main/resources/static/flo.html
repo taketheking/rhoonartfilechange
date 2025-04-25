@@ -624,6 +624,10 @@
             <span class="summary-label">제외 후 정산금액 합계:</span>
             <span class="summary-value" id="filteredSettlementSum">0원</span>
           </div>
+          <div class="summary-item">
+            <span class="summary-label">제외된 항목 정산금액 합계:</span>
+            <span class="summary-value" id="excludedSettlementSum">0원</span>
+          </div>
         </div>
         <div class="table-container">
           <table>
@@ -876,11 +880,16 @@
           return sum + (parseFloat(row.settlementAmount) || 0);
         }, 0);
 
+        // 제외된 항목의 정산금액 합계 계산
+        const excludedSum = totalSum - filteredSum;
+
         // 합계 표시 업데이트
         document.getElementById('totalSettlementSum').textContent = 
           totalSum.toLocaleString() + '원';
         document.getElementById('filteredSettlementSum').textContent = 
           filteredSum.toLocaleString() + '원';
+        document.getElementById('excludedSettlementSum').textContent = 
+          excludedSum.toLocaleString() + '원';
       }
 
       function displayData() {

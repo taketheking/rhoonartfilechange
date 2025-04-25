@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>루나르트 정산 시스템 - 바이브</title>
+    <title>바이브_수호_GRP 정산 시스템</title>
     <link rel="stylesheet" href="/css/styles.css" />
     <style>
       /* 공통 스타일 */
@@ -537,7 +537,7 @@
 
     <div class="main-content">
       <div class="container">
-        <h1 class="title">바이브 정산 데이터</h1>
+        <h1 class="title">바이브_수호_GRP 정산 데이터</h1>
         <div class="action-buttons">
           <input
             type="file"
@@ -623,6 +623,10 @@
           <div class="summary-item">
             <span class="summary-label">제외 후 인접권료 합계:</span>
             <span class="summary-value" id="filteredAdjacentRightsSum">0원</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">제외된 항목 인접권료 합계:</span>
+            <span class="summary-value" id="excludedAdjacentRightsSum">0원</span>
           </div>
         </div>
         <div class="table-container">
@@ -872,11 +876,16 @@
           return sum + (parseFloat(row.adjacentRights) || 0);
         }, 0);
 
+        // 제외된 항목의 인접권료 합계 계산
+        const excludedSum = totalSum - filteredSum;
+
         // 합계 표시 업데이트
         document.getElementById('totalAdjacentRightsSum').textContent = 
           totalSum.toLocaleString() + '원';
         document.getElementById('filteredAdjacentRightsSum').textContent = 
           filteredSum.toLocaleString() + '원';
+        document.getElementById('excludedAdjacentRightsSum').textContent = 
+          excludedSum.toLocaleString() + '원';
       }
 
       // 검색 기능
@@ -954,7 +963,7 @@
             { key: "albumName", editable: true },
             { key: "artistName", editable: true },
             { key: "hitCount", editable: true },
-            { key: "copyrightFee", editable: true },
+            { key: "adjacentRights", editable: true },
           ];
 
           tr.innerHTML = cells
@@ -1125,7 +1134,7 @@
             row.albumName,
             row.artistName,
             row.hitCount,
-            row.copyrightFee,
+            row.adjacentRights,
           ]
             .map((cell) => `"${cell || ""}"`)
             .join(",");
@@ -1392,10 +1401,10 @@
         });
         
         // 인접권료 합계 계산
-        let totalCopyrightFee = 0;
+        let totalAdjacentRights = 0;
         excludedItems.forEach(item => {
-          const fee = parseFloat(item.copyrightFee) || 0;
-          totalCopyrightFee += fee;
+          const fee = parseFloat(item.adjacentRights) || 0;
+          totalAdjacentRights += fee;
         });
         
         // 모달 창 생성
@@ -1448,7 +1457,7 @@
           <p><strong>트랙코드 제외 리스트:</strong> ${trackExclusionList.length}개</p>
           <p><strong>음반코드 제외 리스트:</strong> ${albumExclusionList.length}개</p>
           <p><strong>현재 데이터에서 제외된 항목:</strong> ${excludedItems.length}개</p>
-          <p><strong>제외된 항목의 인접권료 합계:</strong> ${totalCopyrightFee.toLocaleString()}원</p>
+          <p><strong>제외된 항목의 인접권료 합계:</strong> ${totalAdjacentRights.toLocaleString()}원</p>
         `;
         
         const listTitle = document.createElement('h3');
@@ -1489,7 +1498,7 @@
               <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.companyAlbumCode || ''}</td>
               <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.songName || ''}</td>
               <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.artistName || ''}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${(parseFloat(item.copyrightFee) || 0).toLocaleString()}</td>
+              <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${(parseFloat(item.adjacentRights) || 0).toLocaleString()}</td>
             `;
             tbody.appendChild(tr);
           });

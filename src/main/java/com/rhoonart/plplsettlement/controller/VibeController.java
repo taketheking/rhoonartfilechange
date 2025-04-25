@@ -125,7 +125,7 @@ public class VibeController {
                 rowData.put("hitCount", getIntegerCellValue(row.getCell(23))); // 히트수
                 
                 // 인접권료는 실수로 처리 (VPS 최종인접권료 컬럼)
-                rowData.put("copyrightFee", getDoubleCellValue(row.getCell(26))); // VPS 최종인접권료
+                rowData.put("adjacentRights", getDoubleCellValue(row.getCell(26))); // VPS 최종인접권료
                 
                 data.add(rowData);
             }
